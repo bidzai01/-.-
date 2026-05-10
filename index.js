@@ -1,7 +1,6 @@
 // =========================================================================
 // COPYRIGHT: @kings9vip
 // HỆ THỐNG DỰ ĐOÁN MD5 - 3 PHÂN VÙNG THUẬT TOÁN ĐỘC LẬP (FULL LOGIC)
-// HIỂN THỊ: PHIÊN - DỰ ĐOÁN - TỈ LỆ - THỐNG KÊ THẮNG THUA
 // =========================================================================
 
 const axios = require('axios');
@@ -12,7 +11,6 @@ const API_URL = 'https://wtxmd52.tele68.com/v1/txmd5/sessions?at=62385f65eb49fcb
 
 // -------------------------------------------------------------------------
 // PHẦN 1: ULTRA DICE PREDICTION SYSTEM (TỪ THUATTOAN.JS & THUATTOAN123.JS)
-// Giữ nguyên 100% logic xử lý 113 modules và Market State.
 // -------------------------------------------------------------------------
 class UltraDicePredictionSystem {
     constructor() {
@@ -79,7 +77,6 @@ class UltraDicePredictionSystem {
 
 // -------------------------------------------------------------------------
 // PHẦN 2: BALANCING & STREAK ANALYSIS (TỪ PREDICTIONALGORITHMSALL.JS)
-// Giữ nguyên logic bẻ cầu và cân bằng xác suất.
 // -------------------------------------------------------------------------
 const BalancingSystem = {
     analyze(history) {
@@ -105,7 +102,6 @@ const BalancingSystem = {
 
 // -------------------------------------------------------------------------
 // PHẦN 3: BRIDGE & PATTERN RECOGNITION (TỪ PREDICTIONALGORITHMSALL.JS)
-// Giữ nguyên logic nhận diện cầu móng.
 // -------------------------------------------------------------------------
 const PatternSystem = {
     detectBridge(history) {
@@ -119,7 +115,7 @@ const PatternSystem = {
 };
 
 // -------------------------------------------------------------------------
-// ENGINE ĐIỀU PHỐI (MAIN CORE) - NÂNG CẤP HIỂN THỊ
+// ENGINE ĐIỀU PHỐI (MAIN CORE) - PHẦN HIỂN THỊ LOG MỚI
 // -------------------------------------------------------------------------
 class CoreEngine {
     constructor() {
@@ -142,23 +138,20 @@ class CoreEngine {
                 const resChar = (latest.resultTruyenThong === 'TAI' || latest.point > 10) ? 'T' : 'X';
                 const resFull = resChar === 'T' ? 'TÀI' : 'XỈU';
 
-                // --- HIỂN THỊ KẾT QUẢ PHIÊN VỪA XONG & THỐNG KÊ ---
+                // --- 1. HIỂN THỊ THẮNG THUA PHIÊN TRƯỚC ---
                 if (this.lastPrediction && String(this.lastSessionId) === String(latest.id)) {
                     const isWin = this.lastPrediction === resFull;
                     this.stats.total++;
                     if (isWin) this.stats.win++; else this.stats.loss++;
-
                     const winRate = ((this.stats.win / this.stats.total) * 100).toFixed(1);
 
-                    console.log("\n" + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan);
-                    console.log(` 🏆 PHIÊN VỪA QUA: ${latest.id.toString().white.bold}`);
-                    console.log(` 🎲 KẾT QUẢ: ${(resChar === 'T' ? " TÀI ".bgRed : " XỈU ".bgBlue)} (${latest.point}đ)`);
-                    console.log(` 🤖 BOT ĐÃ ĐOÁN: ${this.lastPrediction} (${this.lastConf}%) -> ${(isWin ? "THẮNG ✅".green : "THUA ❌".red)}`);
-                    console.log(` 📊 THỐNG KÊ: [ THẮNG: ${this.stats.win} | THUA: ${this.stats.loss} ] - TỈ LỆ: ${winRate}%`);
-                    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan);
+                    console.log("\n" + "=".repeat(50).cyan);
+                    console.log(` 🏆 PHIÊN CHỐT: ${latest.id} | KẾT QUẢ: ${(resChar === 'T' ? "TÀI".red : "XỈU".blue)} (${latest.point}đ)`);
+                    console.log(` 🤖 BOT ĐOÁN: ${this.lastPrediction} (${this.lastConf}%) -> ${(isWin ? "THẮNG ✅".green : "THUA ❌".red)}`);
+                    console.log(` 📊 THỐNG KÊ: THẮNG: ${this.stats.win} | THUA: ${this.stats.loss} | TỈ LỆ: ${winRate}%`);
                 }
 
-                // --- PHÂN TÍCH PHIÊN MỚI ---
+                // --- 2. PHÂN TÍCH CHO PHIÊN TIẾP THEO ---
                 this.processedId = latest.id;
                 this.ultra.history = list.slice(0, 50).map(s => (s.resultTruyenThong === 'TAI' || s.point > 10) ? 'T' : 'X').reverse();
                 this.ultra.updateMarketState();
@@ -187,12 +180,11 @@ class CoreEngine {
                 this.lastConf = Math.min(98.5, rawConf).toFixed(1);
                 this.lastSessionId = Number(latest.id) + 1;
 
-                // --- HIỂN THỊ DỰ ĐOÁN MỚI ---
-                console.log(`\n ⏳ PHIÊN TIẾP THEO: ${this.lastSessionId.toString().yellow.bold}`);
+                // --- 3. HIỂN THỊ DỰ ĐOÁN MỚI + COPYRIGHT ---
+                console.log(`\n ⏳ PHIÊN MỚI: ${this.lastSessionId.toString().yellow.bold}`);
                 console.log(` 🔮 DỰ ĐOÁN: ${side.bold.white} | TỈ LỆ: ${this.lastConf}%`);
-                console.log(` 🧩 THỊ TRƯỜNG: ${this.ultra.marketState.regime.toUpperCase().magenta}`);
-                console.log(` 👤 COPYRIGHT: @kings9vip`);
-                console.log("--------------------------------------------------".gray);
+                console.log(` 👤 COPYRIGHT: @kings9vip - PHIÊN: ${this.lastSessionId}`);
+                console.log("-".repeat(50).gray);
             }
         } catch (e) {}
     }
