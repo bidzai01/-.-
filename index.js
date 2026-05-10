@@ -1,79 +1,86 @@
 // =========================================================================
-// PROJECT: OMNI ENGINE TERMINAL V3.0 - AI SELF-LEARNING
+// PROJECT: OMNI ENGINE TERMINAL V4.0 - MD5 SPECIALIST
 // DEVELOPER: @DEVANHKHOI (CHỦ TÔN)
-// ENGINE: Deep Memorization & Win/Loss Analytics
+// ENGINE: AI Self-Learning + Break Probability + Bias Balancer
 // =========================================================================
 
 const axios = require('axios');
 const colors = require('colors');
 
-// Cấu hình API (Lấy từ dữ liệu bạn hay dùng)
-const API_URL = 'https://wtx.tele68.com/v1/tx/sessions?at=62385f65eb49fcb34c72a7d6489ad91d';
+// --- CẤU HÌNH API TX MD5 ---
+const API_URL = 'https://wtxmd52.tele68.com/v1/txmd5/sessions?at=62385f65eb49fcb34c72a7d6489ad91d';
 
-// =========================================================================
-// CLASS AI TỰ HỌC (PORTED FROM THUATTOAN123.JS)
-// =========================================================================
-class UltraDeepAI {
+class MD5_UltraAI {
     constructor() {
         this.history = [];
-        this.patternDB = {}; // Ghi nhớ mẫu cầu
-        this.weights = { pattern: 0.4, trend: 0.3, entropy: 0.3 };
+        this.patternDB = {}; 
         this.stats = { total: 0, win: 0, loss: 0, streak: 0, maxStreak: 0 };
         this.lastPrediction = null;
         this.lastSessionId = null;
+        this.processedSessions = new Set();
     }
 
-    // Học từ lịch sử
-    learn(results) {
-        this.history = results.map(r => (r.resultTruyenThong === 'TAI' || r.point > 10) ? 'T' : 'X').reverse();
+    // Logic Tự Học & Phân Tích (Kết hợp từ predictionAlgorithmsAll.js)
+    analyze(sessions) {
+        // Chuyển đổi dữ liệu API sang định dạng T/X
+        this.history = sessions.map(s => (s.resultTruyenThong === 'TAI' || s.point > 10) ? 'T' : 'X').reverse();
         
-        // Ghi nhớ các mẫu cầu từ 3-6 phiên vào bộ nhớ tạm (Self-Learning)
-        for (let i = 0; i < this.history.length - 6; i++) {
-            const pattern = this.history.slice(i, i + 5).join('');
-            const next = this.history[i + 5];
+        // Ghi nhớ mẫu cầu (Memory Learning)
+        for (let i = 0; i < this.history.length - 5; i++) {
+            const pattern = this.history.slice(i, i + 4).join('');
+            const next = this.history[i + 4];
             if (!this.patternDB[pattern]) this.patternDB[pattern] = { T: 0, X: 0 };
             this.patternDB[pattern][next]++;
         }
     }
 
-    // Dự đoán dựa trên bộ nhớ đã học
     predict() {
         if (this.history.length < 10) return { side: '?', conf: 0 };
 
-        const currentPattern = this.history.slice(-5).join('');
-        let tScore = 0, xScore = 0;
+        let taiWeight = 0;
+        let xiuWeight = 0;
 
-        // 1. Đối soát mẫu cầu đã nhớ
+        // 1. Đối soát Pattern 4 phiên gần nhất
+        const currentPattern = this.history.slice(-4).join('');
         if (this.patternDB[currentPattern]) {
-            const p = this.patternDB[currentPattern];
-            tScore += p.T * 2;
-            xScore += p.X * 2;
+            taiWeight += this.patternDB[currentPattern].T * 2.5;
+            xiuWeight += this.patternDB[currentPattern].X * 2.5;
         }
 
-        // 2. Thuật toán Trend Momentum
-        const last3 = this.history.slice(-3).join('');
-        if (last3 === 'TTT') xScore += 1.5; // Bẻ bệt
-        else if (last3 === 'XXX') tScore += 1.5;
+        // 2. Logic Bẻ Cầu (Break Probability)
+        let streak = 1;
+        const lastResult = this.history[this.history.length - 1];
+        for (let i = this.history.length - 2; i >= 0; i--) {
+            if (this.history[i] === lastResult) streak++; else break;
+        }
+        
+        if (streak >= 4) { // Cầu bệt từ 4 tay trở lên
+            if (lastResult === 'T') xiuWeight += (streak * 1.2); else taiWeight += (streak * 1.2);
+        }
 
-        // 3. Tính toán tỷ lệ
-        const total = tScore + xScore;
-        const side = tScore >= xScore ? 'TÀI' : 'XỈU';
-        const conf = total > 0 ? (Math.max(tScore, xScore) / total * 100) : 50;
+        // 3. Bias Balancer (Cân bằng tài xỉu 20 phiên)
+        const last20 = this.history.slice(-20);
+        const taiCount = last20.filter(r => r === 'T').length;
+        if (taiCount >= 13) xiuWeight += 3.0; // Tài quá nhiều thì ưu tiên Xỉu
+        else if (taiCount <= 7) taiWeight += 3.0;
 
-        return { side, conf: Math.min(99, conf + 30).toFixed(1) };
+        const side = taiWeight >= xiuWeight ? 'TÀI' : 'XỈU';
+        const totalWeight = taiWeight + xiuWeight;
+        const conf = totalWeight > 0 ? (Math.max(taiWeight, xiuWeight) / totalWeight * 100) : 50;
+
+        return { side, conf: Math.min(99.9, conf + 25).toFixed(1) };
     }
 
-    // Kiểm tra thắng thua phiên trước
-    checkWinLoss(currentTopSession) {
-        if (this.lastPrediction && this.lastSessionId === currentTopSession.id) {
-            const actual = (currentTopSession.resultTruyenThong === 'TAI' || currentTopSession.point > 10) ? 'TÀI' : 'XỈU';
+    checkResult(session) {
+        if (this.lastPrediction && this.lastSessionId === session.id) {
+            const actual = (session.resultTruyenThong === 'TAI' || session.point > 10) ? 'TÀI' : 'XỈU';
             const isWin = this.lastPrediction === actual;
 
             this.stats.total++;
             if (isWin) {
                 this.stats.win++;
                 this.stats.streak++;
-                if (this.stats.streak > this.stats.maxStreak) this.stats.maxStreak = this.stats.streak;
+                this.stats.maxStreak = Math.max(this.stats.streak, this.stats.maxStreak);
                 return "THẮNG".green.bold;
             } else {
                 this.stats.loss++;
@@ -85,73 +92,72 @@ class UltraDeepAI {
     }
 }
 
-const AI = new UltraDeepAI();
+const AI = new MD5_UltraAI();
 
-// =========================================================================
-// GIAO DIỆN TERMINAL VIP
-// =========================================================================
-function printHeader() {
+function renderUI() {
     console.clear();
     console.log("===============================================================".cyan);
-    console.log("   🚀 OMNI ENGINE TERMINAL V3.0 - HỆ THỐNG TỰ HỌC PHIÊN".bold.white);
-    console.log(`   DEVELOPER: ${"@DEVANHKHOI".yellow} | STATUS: ${"ACTIVE".green}`);
+    console.log("   💎 OMNI MD5 TERMINAL V4.0 - SELF-LEARNING ENGINE".bold.white);
+    console.log(`   AUTHOR: ${"DEV ANH KHÔI".yellow} | MODE: ${"TX MD5 VIP".magenta}`);
     console.log("===============================================================".cyan);
     console.log(`${" PHIÊN ".bgWhite.black} | ${"KẾT QUẢ".bgWhite.black} | ${"DỰ ĐOÁN".bgWhite.black} | ${"TỰ TIN".bgWhite.black} | ${"TRẠNG THÁI".bgWhite.black}`);
     console.log("---------------------------------------------------------------".gray);
 }
 
-function updateFooter() {
-    const winRate = AI.stats.total > 0 ? ((AI.stats.win / AI.stats.total) * 100).toFixed(1) : 0;
+function showStats() {
+    const rate = AI.stats.total > 0 ? ((AI.stats.win / AI.stats.total) * 100).toFixed(1) : 0;
     process.stdout.write(
-        `\r [THỐNG KÊ] Tổng: ${AI.stats.total} | Thắng: ${AI.stats.win.toString().green} | Thua: ${AI.stats.loss.toString().red} | WinRate: ${winRate.toString().yellow}% | Chuỗi: ${AI.stats.streak.toString().cyan}  `
+        `\r [LOGS] TỔNG: ${AI.stats.total} | WIN: ${AI.stats.win.toString().green} | LOSS: ${AI.stats.loss.toString().red} | TỶ LỆ: ${rate.toString().yellow}% | CHUỖI: ${AI.stats.streak.toString().cyan}  `
     );
 }
 
-async function startEngine() {
-    printHeader();
+async function run() {
+    renderUI();
     
     setInterval(async () => {
         try {
             const res = await axios.get(API_URL);
-            const data = res.data.list;
-            if (!data || data.length === 0) return;
+            const list = res.data.list;
+            if (!list || list.length === 0) return;
 
-            const topSession = data[0];
-            const nextId = Number(topSession.id) + 1;
+            const latest = list[0];
+            const nextId = Number(latest.id) + 1;
 
-            // Nếu phát hiện phiên mới
-            if (AI.lastSessionId !== topSession.id) {
-                const status = AI.checkWinLoss(topSession);
-                const resultText = (topSession.resultTruyenThong === 'TAI') ? "TÀI".red : "XỈU".blue;
-                const pointText = topSession.point.toString().white;
-
-                // Log kết quả phiên vừa xong
-                if (AI.lastSessionId) {
+            // Nếu là phiên mới hoàn toàn
+            if (!AI.processedSessions.has(latest.id)) {
+                AI.processedSessions.add(latest.id);
+                
+                const status = AI.checkResult(latest);
+                const resColor = (latest.resultTruyenThong === 'TAI') ? "TÀI".red : "XỈU".blue;
+                
+                // Ghi nhận lịch sử cũ
+                if (AI.lastSessionId === latest.id) {
                     console.log(
-                        ` #${topSession.id.toString().gray} |   ${resultText} (${pointText})  |   ${AI.lastPrediction.padEnd(5)} |   ---    |    ${status}`
+                        ` #${latest.id.toString().gray} |   ${resColor} (${latest.point.toString().white.padEnd(2)}) |   ${AI.lastPrediction.padEnd(5)} |   ---    |    ${status}`
                     );
                 }
 
-                // Học và Dự đoán cho phiên TIẾP THEO
-                AI.learn(data);
-                const pred = AI.predict();
-
-                // Lưu lại để đối soát
-                AI.lastPrediction = pred.side;
+                // Học từ dữ liệu mới nhất
+                AI.analyze(list);
+                
+                // Dự đoán cho phiên tiếp theo
+                const p = AI.predict();
+                AI.lastPrediction = p.side;
                 AI.lastSessionId = nextId;
 
-                // Hiển thị dự đoán mới nhất trên một dòng chờ
                 console.log(
-                    ` #${nextId.toString().yellow} |   ${"???".gray}    |   ${pred.side.bold}   |   ${pred.conf}%  |    ${"CHỜ...".yellow}`
+                    ` #${nextId.toString().yellow} |   ${"???".gray.padEnd(7)} |   ${p.side.bold}   |   ${p.conf}%  |    ${"CHỜ...".yellow}`
                 );
                 console.log("---------------------------------------------------------------".gray);
-                updateFooter();
+                showStats();
+                
+                // Dọn dẹp bộ nhớ Set để tránh tràn RAM
+                if (AI.processedSessions.size > 100) AI.processedSessions.clear();
             }
-        } catch (e) {
-            // Error silent
+        } catch (err) {
+            // Re-connecting...
         }
-    }, 2000);
+    }, 2500);
 }
 
-// KHỞI CHẠY
-startEngine();
+run();
