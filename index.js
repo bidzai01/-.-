@@ -187,8 +187,8 @@ const Engine = new GodfatherEngine();
 async function start() {
     console.clear();
     console.log("===============================================================".cyan);
-    console.log("   💎 OMNI MD5 SUPREME V9.0 - DEVELOPED BY @KINGS9VIP".bold.white);
-    console.log("   Hệ thống: 113 Modules + Deep Learning Brain Active".green);
+    console.log("   DEVELOPED BY @KINGS9VIP".bold.white);
+    console.log("   Hệ thống: GIẢI MÃ ĐẲNG CẤP LC79".green);
     console.log("===============================================================\n".cyan);
 
     setInterval(async () => {
@@ -209,6 +209,6 @@ async function start() {
 
 const server = http.createServer((req, res) => {
     res.writeHead(200);
-    res.end('OMNI V9 God Mode Online');
+    res.end('KING S9 VIP TRÙM KÉO TÀI XỈU VN');
 });
 server.listen(process.env.PORT || 10000, () => start());
