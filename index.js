@@ -1,5 +1,5 @@
 // =========================================================================
-// PROJECT: OMNI MD5 SUPREME V7.0 - ULTIMATE BRAIN (FULL ALGO)
+// PROJECT: OMNI MD5 SUPREME V8.0 - FULL ALGO & RENDER LOG OPTIMIZED
 // DEVELOPER: @kings9vip
 // ENGINE: Deep Hybrid Intelligence (Streak + Pattern + Bridge + Switch)
 // =========================================================================
@@ -15,12 +15,13 @@ class UltimateBrainAI {
         this.history = [];
         this.stats = { total: 0, win: 0, loss: 0, streak: 0, maxStreak: 0 };
         this.lastPrediction = null;
+        this.lastConf = null; // Lưu % tự tin để in ra lúc đối soát
         this.lastSessionId = null;
         this.lastProcessedId = null;
         this.patternMemory = {};
     }
 
-    // --- HÀM CƠ SỞ: PHÂN TÍCH CHUỖI VÀ XÁC SUẤT BẺ (detectStreakAndBreak) ---
+    // --- FULL THUẬT TOÁN (KHÔNG RÚT NGẮN) ---
     detectStreakAndBreak() {
         if (this.history.length === 0) return { streak: 0, currentResult: null, breakProb: 0.0 };
         let streak = 1;
@@ -41,27 +42,24 @@ class UltimateBrainAI {
         return { streak, currentResult, breakProb };
     }
 
-    // --- DỰ ĐOÁN THEO MẪU CẦU DÀI (getPatternPrediction) ---
     getPatternPrediction() {
         if (this.history.length < 6) return { prediction: 0, confidence: 0 };
         const last3 = this.history.slice(-3).join('');
         const last4 = this.history.slice(-4).join('');
 
-        if (last4 === 'TXTX' || last4 === 'XTXT') return { prediction: last4[3] === 'T' ? 2 : 1, confidence: 0.75 }; // Cầu 1-1
-        if (last4 === 'TTXX' || last4 === 'XXTT') return { prediction: last4[3] === 'T' ? 1 : 2, confidence: 0.7 };  // Cầu 2-2
+        if (last4 === 'TXTX' || last4 === 'XTXT') return { prediction: last4[3] === 'T' ? 2 : 1, confidence: 0.75 }; 
+        if (last4 === 'TTXX' || last4 === 'XXTT') return { prediction: last4[3] === 'T' ? 1 : 2, confidence: 0.7 };  
         return { prediction: 0, confidence: 0 };
     }
 
-    // --- DỰ ĐOÁN THEO TẦN SUẤT NHẢY (getSwitchPrediction) ---
     getSwitchPrediction() {
         const last10 = this.history.slice(-10);
         const switches = last10.slice(1).reduce((count, curr, idx) => count + (curr !== last10[idx] ? 1 : 0), 0);
-        if (switches >= 7) return 1; // Ưu tiên nhảy (1-1)
-        if (switches <= 3) return 2; // Ưu tiên bệt
+        if (switches >= 7) return 1; 
+        if (switches <= 3) return 2; 
         return 0;
     }
 
-    // --- LÕI DỰ ĐOÁN TỔNG HỢP (FULL ALGO FROM predictionAlgorithmsAll.js) ---
     predict() {
         if (this.history.length < 10) return { side: '?', conf: 0 };
 
@@ -69,7 +67,6 @@ class UltimateBrainAI {
         let xiuScore = 0;
         const weights = { streak: 0.4, pattern: 0.25, switch: 0.15, bias: 0.2 };
 
-        // 1. Phân tích Bệt & Xác suất bẻ
         const streakData = this.detectStreakAndBreak();
         if (streakData.breakProb > 0.65) {
             if (streakData.currentResult === 'T') xiuScore += weights.streak; else taiScore += weights.streak;
@@ -77,24 +74,20 @@ class UltimateBrainAI {
             if (streakData.currentResult === 'T') taiScore += weights.streak; else xiuScore += weights.streak;
         }
 
-        // 2. Mẫu cầu dài
         const patternData = this.getPatternPrediction();
         if (patternData.prediction === 1) taiScore += weights.pattern;
         else if (patternData.prediction === 2) xiuScore += weights.pattern;
 
-        // 3. Tần suất nhảy
         const switchPred = this.getSwitchPrediction();
-        if (switchPred === 1) { // Thích nhảy
+        if (switchPred === 1) { 
             if (streakData.currentResult === 'T') xiuScore += weights.switch; else taiScore += weights.switch;
         }
 
-        // 4. Cân bằng Bias (Bộ não 30 phiên)
         const last30 = this.history.slice(-30);
         const taiCount = last30.filter(r => r === 'T').length;
         if (taiCount > 17) xiuScore += weights.bias;
         else if (taiCount < 13) taiScore += weights.bias;
 
-        // Tổng kết
         const side = taiScore >= xiuScore ? 'TÀI' : 'XỈU';
         const total = taiScore + xiuScore;
         const conf = ((Math.max(taiScore, xiuScore) / (total || 1)) * 100).toFixed(1);
@@ -102,10 +95,8 @@ class UltimateBrainAI {
         return { side, conf: Math.min(99.5, parseFloat(conf) + 20).toFixed(1) };
     }
 
-    // --- QUẢN LÝ DỮ LIỆU ---
     updateHistory(sessions) {
         this.history = sessions.map(s => (s.resultTruyenThong === 'TAI' || s.point > 10) ? 'T' : 'X').reverse();
-        // Lưu mẫu vào bộ nhớ "não"
         const pattern = this.history.slice(-5).join('');
         if (!this.patternMemory[pattern]) this.patternMemory[pattern] = 0;
         this.patternMemory[pattern]++;
@@ -120,11 +111,11 @@ class UltimateBrainAI {
                 this.stats.win++;
                 this.stats.streak++;
                 this.stats.maxStreak = Math.max(this.stats.streak, this.stats.maxStreak);
-                return "THẮNG".green.bold;
+                return "🟢 THẮNG".green.bold;
             } else {
                 this.stats.loss++;
                 this.stats.streak = 0;
-                return "THUA".red.bold;
+                return "🔴 THUA".red.bold;
             }
         }
         return null;
@@ -133,25 +124,13 @@ class UltimateBrainAI {
 
 const AI = new UltimateBrainAI();
 
-function printHeader() {
-    console.clear();
-    console.log("===============================================================".cyan);
-    console.log("   🧬 OMNI MD5 SUPREME V7.0 - THE ULTIMATE BRAIN ENGINE".bold.white);
-    console.log(`   DEVELOPER: ${"@kings9vip".yellow.bold} | STATUS: ${"FULL ALGO ACTIVE".green}`);
-    console.log("===============================================================".cyan);
-    console.log(`${" PHIÊN ".bgWhite.black} | ${"KẾT QUẢ".bgWhite.black} | ${"DỰ ĐOÁN".bgWhite.black} | ${"TỰ TIN".bgWhite.black} | ${"TRẠNG THÁI".bgWhite.black}`);
-    console.log("---------------------------------------------------------------".gray);
-}
-
-function printStats() {
-    const rate = AI.stats.total > 0 ? ((AI.stats.win / AI.stats.total) * 100).toFixed(1) : 0;
-    process.stdout.write(
-        `\r [LOG] TỔNG: ${AI.stats.total} | THẮNG: ${AI.stats.win.toString().green} | THUA: ${AI.stats.loss.toString().red} | TỶ LỆ: ${rate.toString().yellow}% | CHUỖI: ${AI.stats.streak.toString().cyan}  `
-    );
-}
+console.clear();
+console.log("===============================================================".cyan);
+console.log("   🚀 OMNI MD5 SUPREME V8.0 - @kings9vip ACTIVE".bold.white);
+console.log("   Trạng thái: Đang kết nối dữ liệu máy chủ...".gray);
+console.log("===============================================================\n".cyan);
 
 async function run() {
-    printHeader();
     setInterval(async () => {
         try {
             const res = await axios.get(API_URL, { timeout: 5000 });
@@ -159,31 +138,48 @@ async function run() {
             if (!list || list.length === 0) return;
 
             const latest = list[0];
+
+            // Nếu phát hiện phiên mới đã có kết quả
             if (String(latest.id) !== String(AI.lastProcessedId)) {
+                
+                // 1. CHỐT KẾT QUẢ PHIÊN VỪA XONG
                 const status = AI.checkWinLoss(latest);
                 if (status) {
-                    const resColor = (latest.resultTruyenThong === 'TAI') ? "TÀI".red : "XỈU".blue;
-                    console.log(` #${latest.id.toString().gray} |   ${resColor} (${latest.point.toString().white.padEnd(2)}) |   ${AI.lastPrediction.padEnd(5)} |   ---    |    ${status}`);
+                    const resColor = (latest.resultTruyenThong === 'TAI') ? "TÀI".red.bold : "XỈU".blue.bold;
+                    const rate = AI.stats.total > 0 ? ((AI.stats.win / AI.stats.total) * 100).toFixed(1) : 0;
+                    
+                    console.log("---------------------------------------------------------".gray);
+                    console.log(` 🎯 KẾT QUẢ PHIÊN: ${latest.id}`.white.bold);
+                    console.log(` 🎲 THỰC TẾ: ${resColor} (${latest.point.toString().yellow})`);
+                    console.log(` 🤖 DỰ ĐOÁN: ${AI.lastPrediction.bold} (Tự tin: ${AI.lastConf}%)`);
+                    console.log(` 📌 TRẠNG THÁI: ${status}`);
+                    console.log(` 📊 THỐNG KÊ: Tổng: ${AI.stats.total} | Win: ${AI.stats.win.toString().green} | Loss: ${AI.stats.loss.toString().red} | Rate: ${rate.toString().cyan}%`);
+                    console.log("---------------------------------------------------------\n".gray);
                 }
                 
+                // 2. HỌC VÀ SOI CẦU PHIÊN TIẾP THEO
                 AI.lastProcessedId = latest.id;
                 AI.updateHistory(list);
                 
                 const p = AI.predict();
                 AI.lastPrediction = p.side;
+                AI.lastConf = p.conf; // Lưu lại % để phiên sau in ra
                 AI.lastSessionId = Number(latest.id) + 1;
 
-                console.log(` #${AI.lastSessionId.toString().yellow} |   ${"???".gray.padEnd(7)} |   ${p.side.bold}   |   ${p.conf}%  |    ${"CHỜ...".yellow}`);
-                console.log("---------------------------------------------------------------".gray);
-                printStats();
+                // 3. IN DỰ ĐOÁN PHIÊN MỚI
+                console.log(` ⏳ ĐANG SOI PHIÊN KẾ TIẾP: ${AI.lastSessionId}`.yellow.bold);
+                console.log(` 🔮 DỰ ĐOÁN: ${p.side.bold} - Tự tin: ${p.conf.toString().cyan}%`);
+                console.log(` 🔄 Chờ kết quả từ API...`.gray);
             }
-        } catch (e) {}
+        } catch (e) {
+            // Lỗi mạng ẩn đi để tránh rác log
+        }
     }, 2500);
 }
 
 // Server giữ kết nối cho Render
 const server = http.createServer((req, res) => {
     res.writeHead(200);
-    res.end('OMNI V7 @kings9vip is Online');
+    res.end('@kings9vip');
 });
 server.listen(process.env.PORT || 10000, () => run());
