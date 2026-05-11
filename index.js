@@ -1,266 +1,170 @@
-// =========================================================================
-// COPYRIGHT: @DEVANHKHOI
-// SIÊU HỆ THỐNG DỰ ĐOÁN TỔNG HỢP V6.0 - ULTIMATE EDITION
-// TÍCH HỢP 3 TẦNG GIẢI MÃ ĐA THUẬT TOÁN (TRIPLE-LAYER DECODER)
-// 1. LỚP VẬT LÝ: MD5 Entropy Gradient & Bit-Density (từ 47g23.py & MD5Advanced)
-// 2. LỚP TOÁN HỌC: Markov Chain & Pattern Database (từ lc.js & MarkovEngine)
-// 3. LỚP HÀNH VI: Adaptive Streak & Volatility Filter (từ predictionAlgorithmsAll.js)
-// =========================================================================
+/**
+ * @Developer: Dev Anh Khôi (Chủ Tôn)
+ * @Description: Tích hợp 3 thuật toán cốt lõi và xuất JSON chuẩn
+ */
 
-const axios = require('axios');
-const http = require('http');
+const express = require('express');
+const app = express();
 
-const API_URL = 'https://wtxmd52.tele68.com/v1/txmd5/sessions?at=62385f65eb49fcb34c72a7d6489ad91d';
+// =====================================================================
+// 1. CHỈ GIỮ ĐÚNG 3 THUẬT TOÁN TỪ predictionAlgorithmsAll.js
+// =====================================================================
 
-let finalRenderJson = {
-    copyright: "@DEVANHKHOI",
-    status: "Đang khởi tạo 113 modules AI...",
-};
-
-// =========================================================================
-// TẦNG 1: GIẢI MÃ HASH (MD5/SHA-256) - LẤY TỪ TINH HOA 47G23.PY
-// =========================================================================
-class Layer1_HashDecoder {
-    static getEntropy(md5) {
-        let f = {};
-        for (let c of md5) f[c] = (f[c] || 0) + 1;
-        return -Object.values(f).reduce((acc, v) => acc + (v / 32) * Math.log2(v / 32), 0);
-    }
-
-    static analyze(md5) {
-        if (!md5 || md5.length !== 32) return { t: 0, x: 0 };
-        let tai = 0, xiu = 0;
-        
-        // 1. Entropy Gradient
-        let blocks = [md5.substring(0, 8), md5.substring(8, 16), md5.substring(16, 24), md5.substring(24, 32)];
-        let ents = blocks.map(b => this.getEntropy(b));
-        let grad = 0;
-        for (let i = 1; i < ents.length; i++) grad += (ents[i] - ents[i-1]);
-
-        // 2. Hex Energy & Bit Density
-        let vals = md5.split('').map(c => parseInt(c, 16));
-        let energy = vals.reduce((a, b) => a + b, 0);
-        
-        // Scoring logic
-        grad > 0 ? tai += 2.5 : xiu += 2.5;
-        energy > 240 ? tai += 1.5 : xiu += 1.5;
-        
-        return { t: tai, x: xiu };
-    }
+// Thuật toán 1: Phân tích xu hướng và điểm chuyển đổi
+function predictTrendAndSwitch(history) {
+    if (!history || history.length < 5) return { prediction: 0, confidence: 0 };
+    const recent = history.slice(-5).map(h => h.result);
+    let taiCount = recent.filter(r => r === 'Tài').length;
+    let xiuCount = recent.filter(r => r === 'Xỉu').length;
+    let prediction = 0;
+    if (taiCount > xiuCount) prediction = 1; // 1 là Tài
+    else if (xiuCount > taiCount) prediction = 2; // 2 là Xỉu
+    return { prediction, confidence: Math.max(taiCount, xiuCount) / 5 };
 }
 
-// =========================================================================
-// TẦNG 2: CHUỖI MARKOV & MẪU CẦU LỊCH SỬ - LẤY TỪ LC.JS
-// =========================================================================
-class Layer2_MarkovPattern {
-    constructor() {
-        this.transitions = { 'T': { 'T': 0, 'X': 0 }, 'X': { 'T': 0, 'X': 0 } };
-        this.patternDB = {}; 
+// Thuật toán 2: Phát hiện chuỗi (Streak) và xác suất bẻ cầu (Bridge)
+function detectStreakAndBreak(history) {
+    if (!history || history.length === 0) return { streak: 0, currentResult: null, breakProb: 0.0 };
+    let streak = 1;
+    const currentResult = history[history.length - 1].result;
+    for (let i = history.length - 2; i >= 0; i--) {
+        if (history[i].result === currentResult) streak++;
+        else break;
+    }
+    const last20 = history.slice(-20).map(h => h.result);
+    if (!last20.length) return { streak, currentResult, breakProb: 0.0 };
+    const switches = last20.slice(1).reduce((count, curr, idx) => count + (curr !== last20[idx] ? 1 : 0), 0);
+    const taiCount = last20.filter(r => r === 'Tài').length;
+    const xiuCount = last20.filter(r => r === 'Xỉu').length;
+    const imbalance = Math.abs(taiCount - xiuCount) / last20.length;
+    
+    let breakProb = 0.0;
+    if (streak >= 8) {
+        breakProb = Math.min(0.6 + (switches / 20) + imbalance * 0.15, 0.95);
+    } else if (streak >= 4) {
+        breakProb = Math.min(0.4 + (switches / 30) + imbalance * 0.1, 0.7);
+    } else {
+        breakProb = 0.2;
     }
 
-    train(history) {
-        for (let i = 0; i < history.length - 1; i++) {
-            let curr = history[i];
-            let next = history[i+1];
-            if (this.transitions[curr]) this.transitions[curr][next]++;
-            
-            // Pattern depth 4 (Học từ lc.js)
-            if (i < history.length - 4) {
-                let p = history.slice(i, i + 4).join('');
-                let n = history[i + 4];
-                if (!this.patternDB[p]) this.patternDB[p] = { 'T': 0, 'X': 0 };
-                this.patternDB[p][n]++;
-            }
-        }
-    }
+    let prediction = currentResult === 'Tài' ? 1 : 2;
+    if (breakProb > 0.5) prediction = prediction === 1 ? 2 : 1;
 
-    predict(history) {
-        if (history.length < 4) return { t: 0, x: 0 };
-        const last = history[history.length - 1];
-        const last4 = history.slice(-4).join('');
-        
-        let tScore = 0, xScore = 0;
-        
-        // 1-step Markov
-        const nextProb = this.transitions[last];
-        tScore += (nextProb.T / (nextProb.T + nextProb.X || 1)) * 2;
-        xScore += (nextProb.X / (nextProb.T + nextProb.X || 1)) * 2;
-        
-        // Pattern Matching
-        if (this.patternDB[last4]) {
-            const p4 = this.patternDB[last4];
-            tScore += (p4.T / (p4.T + p4.X || 1)) * 4;
-            xScore += (p4.X / (p4.T + p4.X || 1)) * 4;
-        }
-        
-        return { t: tScore, x: xScore };
-    }
+    return { streak, currentResult, breakProb, prediction };
 }
 
-// =========================================================================
-// TẦNG 3: BỘ LỌC BIẾN ĐỘNG & BẺ CẦU - LẤY TỪ PREDICTIONALGORITHMSALL.JS
-// =========================================================================
-class Layer3_BehavioralFilter {
-    static detectBreakProb(history) {
-        if (history.length < 5) return 0.5;
-        let streak = 1;
-        const current = history[history.length - 1];
-        for (let i = history.length - 2; i >= 0; i--) {
-            if (history[i] === current) streak++; else break;
-        }
-        
-        // Xác suất bẻ cầu (Càng bệt lâu xác suất bẻ càng cao)
-        return Math.min(streak * 0.15, 0.9);
-    }
-
-    static getVolatility(history) {
-        let changes = 0;
-        for (let i = 1; i < history.length; i++) {
-            if (history[i] !== history[i-1]) changes++;
-        }
-        return changes / (history.length - 1 || 1);
-    }
+// Thuật toán 3: AI nhận diện mẫu hình (Pattern)
+function predictAIHTDD(history) {
+    if (!history || history.length < 3) return { prediction: 'Tài', confidence: 0 };
+    const last3 = history.slice(-3).map(h => h.result).join('-');
+    const patterns = {
+        'Tài-Tài-Tài': 'Xỉu', 'Xỉu-Xỉu-Xỉu': 'Tài',
+        'Tài-Xỉu-Tài': 'Xỉu', 'Xỉu-Tài-Xỉu': 'Tài',
+        'Tài-Tài-Xỉu': 'Xỉu', 'Xỉu-Xỉu-Tài': 'Tài'
+    };
+    return { 
+        prediction: patterns[last3] || (Math.random() > 0.5 ? 'Tài' : 'Xỉu'), 
+        confidence: 0.6 
+    };
 }
 
-// =========================================================================
-// HỆ THỐNG ĐIỀU PHỐI TRUNG TÂM (CORE ORCHESTRATOR)
-// =========================================================================
-class SuperOrchestrator {
-    constructor() {
-        this.markov = new Layer2_MarkovPattern();
-        this.history = [];
-        this.processedId = null;
-        this.lastPrediction = null;
-        this.lastSid = null;
-        
-        this.stats = {
-            total: 0, win: 0, 
-            curWin: 0, maxWin: 0,
-            curLoss: 0, maxLoss: 0
-        };
+// Hàm phụ trợ: Phát hiện mẫu xấu
+function isBadPattern(history) {
+    if (history.length < 5) return false;
+    const last5 = history.slice(-5).map(h => h.result).join('');
+    return last5 === 'TàiXỉuTàiXỉuTài' || last5 === 'XỉuTàiXỉuTàiXỉu';
+}
+
+// Ensemble: Tổng hợp 3 thuật toán
+function getEnsemblePrediction(history) {
+    if (!history || history.length < 5) return null;
+    
+    const trendPred = predictTrendAndSwitch(history);
+    const bridgePred = detectStreakAndBreak(history);
+    const aiPred = predictAIHTDD(history);
+    
+    const weights = { trend: 0.3, switch: 0.2, bridge: 0.3, aihtdd: 0.2 };
+    let taiScore = 0, xiuScore = 0;
+    
+    // Áp dụng thuật toán 1 & 2
+    if (trendPred.prediction === 1) taiScore += weights.trend; else if (trendPred.prediction === 2) xiuScore += weights.trend;
+    if (bridgePred.prediction === 1) taiScore += weights.bridge; else if (bridgePred.prediction === 2) xiuScore += weights.bridge;
+    
+    // Áp dụng thuật toán 3
+    if (aiPred.prediction === 'Tài') taiScore += weights.aihtdd; else xiuScore += weights.aihtdd;
+    
+    // Điều chỉnh khi phát hiện mẫu xấu
+    if (isBadPattern(history)) {
+        taiScore *= 0.85; 
+        xiuScore *= 0.85;
     }
+    
+    // Cân bằng nếu dự đoán nghiêng quá nhiều
+    const last10Preds = history.slice(-10).map(h => h.result);
+    const taiPredCount = last10Preds.filter(r => r === 'Tài').length;
+    if (taiPredCount >= 7) xiuScore += 0.2;
+    else if (taiPredCount <= 3) taiScore += 0.2;
+    
+    const totalScore = taiScore + xiuScore;
+    const finalPred = taiScore > xiuScore ? 'Tài' : 'Xỉu';
+    const confidence = totalScore > 0 ? (Math.max(taiScore, xiuScore) / totalScore) : 0;
+    
+    return {
+        prediction: finalPred,
+        confidence: (confidence * 100).toFixed(2),
+        details: { trendPred, bridgePred, aiPred }
+    };
+}
 
-    async update() {
-        try {
-            const res = await axios.get(API_URL, { timeout: 4000 });
-            const list = res.data.list;
-            if (!list || list.length === 0) return;
+function predict(history) {
+    return getEnsemblePrediction(history);
+}
 
-            const latest = list[0];
-            if (String(latest.id) === String(this.processedId)) return;
+// =====================================================================
+// 2. API TRẢ VỀ JSON CHUẨN FORM (Thay thế router hiện tại của bạn)
+// =====================================================================
 
-            const actualRes = (latest.point > 10) ? 'T' : 'X';
-            const actualFull = actualRes === 'T' ? 'TÀI' : 'XỈU';
+app.get('/taixiu', (req, res) => {
+    try {
+        // Lấy data history từ biến global của file lc.js (ví dụ predictionHistory.hu)
+        // Lưu ý: Đảm bảo format của mảng history là [{ result: 'Tài' }, { result: 'Xỉu' }, ...]
+        const history = predictionHistory.hu || []; 
+        
+        if (history.length < 5) {
+            return res.json({ error: "Chưa đủ dữ liệu để phân tích" });
+        }
 
-            // Cập nhật thống kê kết quả phiên vừa xong
-            if (this.lastPrediction && this.lastSid === latest.id) {
-                this.processStats(this.lastPrediction === actualFull);
-            }
+        // Lấy thông tin phiên mới nhất để hiển thị
+        const currentData = history[history.length - 1]; 
+        
+        // Chạy full 3 thuật toán
+        const predictionResult = predict(history);
 
-            this.processedId = latest.id;
-            // Chuyển lịch sử về dạng mảng T/X để training
-            this.history = list.slice(0, 100).map(s => (s.point > 10) ? 'T' : 'X').reverse();
-            
-            // --- BẮT ĐẦU GIẢI MÃ 3 TẦNG ---
-            this.markov.train(this.history);
-
-            let tFinal = 0, xFinal = 0;
-
-            // Tầng 1: Hash Analysis (40% trọng số)
-            const s1 = Layer1_HashDecoder.analyze(latest.md5);
-            tFinal += s1.t; xFinal += s1.x;
-
-            // Tầng 2: Markov/Pattern (35% trọng số)
-            const s2 = this.markov.predict(this.history);
-            tFinal += s2.t; xFinal += s2.x;
-
-            // Tầng 3: Behavioral Logic (25% trọng số)
-            const breakProb = Layer3_BehavioralFilter.detectBreakProb(this.history);
-            const lastRes = this.history[this.history.length-1];
-            if (breakProb > 0.6) {
-                lastRes === 'T' ? xFinal += (breakProb * 5) : tFinal += (breakProb * 5);
-            }
-
-            // Bộ lọc biến động
-            const vol = Layer3_BehavioralFilter.getVolatility(this.history.slice(-15));
-            const multiplier = vol > 0.7 ? 0.75 : 1.15;
-
-            // --- KẾT LUẬN DỰ ĐOÁN ---
-            const decision = tFinal >= xFinal ? 'TÀI' : 'XỈU';
-            let confidence = (Math.max(tFinal, xFinal) / (tFinal + xFinal || 1)) * 100;
-            confidence = (confidence * multiplier).toFixed(1);
-            
-            // Giới hạn Confidence thực tế
-            if (confidence > 96.8) confidence = 96.8;
-            if (confidence < 51.0) confidence = 51.2;
-
-            this.lastPrediction = decision;
-            this.lastSid = Number(latest.id) + 1;
-
-            finalRenderJson = {
-                copyright: "@DEVANHKHOI",
-                phien_hien_tai: {
-                    id: latest.id,
-                    ket_qua: actualFull,
-                    dice: `${latest.dice1}-${latest.dice2}-${latest.dice3} (${latest.point})`,
+        // Xuất JSON đúng chuẩn ảnh yêu cầu
+        const responseData = {
+            phien: currentData.phien ? currentData.phien + 1 : 0, // Phiên mục tiêu dự đoán
+            Xuc_xac_1: currentData.dices ? currentData.dices[0] : 0,
+            Xuc_xac_2: currentData.dices ? currentData.dices[1] : 0,
+            Xuc_xac_3: currentData.dices ? currentData.dices[2] : 0,
+            Tong: currentData.tong || 0,
+            Ket_qua: currentData.result || "Chưa rõ",
+            du_doan: predictionResult ? predictionResult.prediction : "Không xác định",
+            do_tin_cay: predictionResult ? `${Math.round(predictionResult.confidence)}%` : "0%",
+            thong_tin_bo_sung: {
+                sessionStats: {
+                    streak: predictionResult ? predictionResult.details.bridgePred.streak : 0,
+                    breakProb: predictionResult ? predictionResult.details.bridgePred.breakProb.toFixed(2) : 0
                 },
-                du_doan_tiep_theo: {
-                    id: this.lastSid,
-                    ket_qua: decision,
-                    do_tin_cay: `${confidence}%`,
-                    thuật_toán: "Triple-Layer AI V6.0",
-                    trạng_thái: vol > 0.7 ? "Cầu Nhảy (Biến động)" : "Cầu Bệt/Khuôn (Ổn định)"
-                },
-                thống_kê_hệ_thống: {
-                    tong_phien: this.stats.total,
-                    ti_le_thang: `${((this.stats.win / Math.max(1, this.stats.total)) * 100).toFixed(1)}%`,
-                    chuoi_thang_hien_tai: this.stats.curWin,
-                    chuoi_thang_max: this.stats.maxWin,
-                    chuoi_thua_max: this.stats.maxLoss
+                marketState: {
+                    regime: "normal"
                 }
-            };
+            }
+        };
 
-            console.clear();
-            console.log(`[V6.0] P.${latest.id}: ${actualFull} | Thắng: ${this.stats.win}/${this.stats.total} | Chuỗi: ${this.stats.curWin}`);
-            console.log(`[NEXT] P.${this.lastSid}: ${decision} (${confidence}%)`);
+        res.json(responseData);
 
-        } catch (err) {
-            console.log("[!] Lỗi API hoặc đường truyền...");
-        }
+    } catch (error) {
+        console.error('Lỗi khi xử lý dự đoán:', error);
+        res.status(500).json({ error: 'Lỗi server nội bộ' });
     }
-
-    processStats(isWin) {
-        this.stats.total++;
-        if (isWin) {
-            this.stats.win++;
-            this.stats.curWin++;
-            this.stats.curLoss = 0;
-            if (this.stats.curWin > this.stats.maxWin) this.stats.maxWin = this.stats.curWin;
-        } else {
-            this.stats.curLoss++;
-            this.stats.curWin = 0;
-            if (this.stats.curLoss > this.stats.maxLoss) this.stats.maxLoss = this.stats.curLoss;
-        }
-    }
-}
-
-// Khởi chạy hệ thống
-const Engine = new SuperOrchestrator();
-setInterval(() => Engine.update(), 2500);
-
-// Web Server
-const server = http.createServer((req, res) => {
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.writeHead(200);
-    res.end(JSON.stringify(finalRenderJson, null, 4));
-});
-
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => {
-    console.log(`\n======================================================`);
-    console.log(`🚀 ENGINE V6.0 BY @DEVANHKHOI (CHỦ TÔN)`);
-    console.log(`📊 Đã nạp 3 file thuật toán: lc.js, prediction, dự đoán`);
-    console.log(`🌐 Server: http://localhost:${PORT}`);
-    console.log(`======================================================\n`);
 });
