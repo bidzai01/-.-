@@ -5,7 +5,7 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const API_URL = "https://apivip-anhkhoi-dzaivcl.onrender.com/data";
+const API_URL = "https://sunlol-zv7x.onrender.com/data";
 
 // ======================================================
 // FILE LƯU TRỮ
