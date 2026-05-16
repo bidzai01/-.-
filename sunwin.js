@@ -5,7 +5,7 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const API_URL = "https://sunlol-zv7x.onrender.com/data";
+const API_URL = "https://apivip-anhkhoi-dzaivcl.onrender.com/data";
 
 // ======================================================
 // FILE LƯU TRỮ
@@ -22,10 +22,19 @@ function loadDB() {
 }
 
 // ======================================================
-// FORMAT DATA
+// FORMAT DATA - Hỗ trợ cả 2 loại API
 // ======================================================
-function normalizeData(data) {
-    if (!Array.isArray(data)) data = [data];
+function normalizeData(rawData) {
+    // API trả về { total: X, data: [...] }
+    let data;
+    if (rawData.data && Array.isArray(rawData.data)) {
+        data = rawData.data;
+    } else if (Array.isArray(rawData)) {
+        data = rawData;
+    } else {
+        data = [rawData];
+    }
+    
     return data.map(item => {
         const d1 = item.xuc_xac_1 || item.x1 || 0;
         const d2 = item.xuc_xac_2 || item.x2 || 0;
@@ -56,13 +65,11 @@ class InfinityPredictor {
         this.maxWinStreak = 0;
         this.loseStreak = 0;
 
-        // Bộ lọc dữ liệu kép
         this.dualMemory = {
             win: { patterns: new Map(), sumHistory: [] },
             lose: { patterns: new Map(), sumHistory: [] }
         };
 
-        // Phân tích từng viên xúc xắc
         this.diceAnalysis = {
             d1: { freq: {1:0,2:0,3:0,4:0,5:0,6:0}, transitions: {}, hotFace: 1, coldFace: 1 },
             d2: { freq: {1:0,2:0,3:0,4:0,5:0,6:0}, transitions: {}, hotFace: 1, coldFace: 1 },
@@ -72,11 +79,11 @@ class InfinityPredictor {
             faceStreaks: { d1: {}, d2: {}, d3: {} }
         };
 
-        // Trọng số cầu
         this.cauWeights = new Map();
 
         this.loadFromFile();
         console.log('♾️ INFINITY PREDICTOR: VÔ CỰC ĐÃ KÍCH HOẠT');
+        console.log('🔗 API: ' + API_URL);
     }
 
     loadFromFile() {
@@ -89,6 +96,7 @@ class InfinityPredictor {
                     this.cauWeights.set(k, v);
                 }
             }
+            console.log('📂 Đã tải dữ liệu học: ' + this.accuracy.total + ' lần dự đoán');
         }
     }
 
@@ -101,25 +109,17 @@ class InfinityPredictor {
         });
     }
 
-    // ============================================
-    // HELPER
-    // ============================================
     getResults() { return this.history.map(h => h.result === 'Tài' ? 'T' : 'X'); }
     getScores() { return this.history.map(h => h.tong || (h.dice ? h.dice.reduce((a, b) => a + b, 0) : 0)); }
 
-    // ============================================
-    // CẬP NHẬT PHÂN TÍCH XÚC XẮC
-    // ============================================
     updateDiceAnalysis(d1, d2, d3, result) {
         const diceNames = ['d1', 'd2', 'd3'];
         const dice = [d1, d2, d3];
 
-        // Tần suất
         this.diceAnalysis.d1.freq[d1]++;
         this.diceAnalysis.d2.freq[d2]++;
         this.diceAnalysis.d3.freq[d3]++;
 
-        // Chuyển đổi
         if (this.history.length >= 2) {
             const prev = this.history[this.history.length - 2];
             if (prev.dice) {
@@ -131,16 +131,13 @@ class InfinityPredictor {
             }
         }
 
-        // Bộ ba lặp
         const triple = `${d1},${d2},${d3}`;
         this.diceAnalysis.tripleRepeat.set(triple, (this.diceAnalysis.tripleRepeat.get(triple) || 0) + 1);
 
-        // Tổng momentum
         const sum = d1 + d2 + d3;
         this.diceAnalysis.sumMomentum.push(sum);
         if (this.diceAnalysis.sumMomentum.length > 30) this.diceAnalysis.sumMomentum.shift();
 
-        // Streak mặt
         for (let i = 0; i < 3; i++) {
             const face = dice[i];
             const diceObj = this.diceAnalysis[diceNames[i]];
@@ -154,7 +151,6 @@ class InfinityPredictor {
             if (diceObj.faceStreaks[face].length > 20) diceObj.faceStreaks[face].shift();
         }
 
-        // Hot/Cold
         for (let i = 0; i < 3; i++) {
             const diceObj = this.diceAnalysis[diceNames[i]];
             const entries = Object.entries(diceObj.freq);
@@ -165,16 +161,12 @@ class InfinityPredictor {
             }
         }
 
-        // Bộ nhớ kép
         const isWin = result === 'Tài' ? (sum >= 11) : (sum < 11);
         const memory = isWin ? this.dualMemory.win : this.dualMemory.lose;
         memory.sumHistory.push(sum);
         if (memory.sumHistory.length > 50) memory.sumHistory.shift();
     }
 
-    // ============================================
-    // PHÂN TÍCH TỪNG VIÊN XÚC XẮC
-    // ============================================
     predictFromIndividualDice() {
         const signals = [];
         const n = this.history.length;
@@ -209,9 +201,6 @@ class InfinityPredictor {
         return signals;
     }
 
-    // ============================================
-    // PHÂN TÍCH BỆT
-    // ============================================
     analyzeBiet(results) {
         const n = results.length;
         if (n < 2) return [];
@@ -238,21 +227,16 @@ class InfinityPredictor {
         return signals;
     }
 
-    // ============================================
-    // PHÁT HIỆN HÀNG TRĂM LOẠI CẦU
-    // ============================================
     detectAllCauTypes(results, scores) {
         const n = results.length;
         const signals = [];
         if (n < 4) return signals;
         const last = results[n - 1];
 
-        // 1-1
         let altCount = 0;
         for (let i = n - 1; i >= 1; i--) { if (results[i] !== results[i - 1]) altCount++; else break; }
         if (altCount >= 3) signals.push({ p: last === 'T' ? 'X' : 'T', c: Math.min(90, 65 + altCount * 2), w: 0.8 + altCount * 0.15, s: 'cau_11', r: `Cầu 1-1 (${altCount + 1})` });
 
-        // 2-2
         if (n >= 8) {
             let seg = results.slice(-8);
             let is22 = true;
@@ -263,7 +247,6 @@ class InfinityPredictor {
             }
         }
 
-        // 3-3
         if (n >= 12) {
             let seg = results.slice(-12);
             let is33 = true;
@@ -277,7 +260,6 @@ class InfinityPredictor {
             }
         }
 
-        // 1-2-3 & 3-2-1
         if (n >= 6) {
             let l6 = results.slice(-6).join('');
             if (l6 === 'TXXTTT') signals.push({ p: 'X', c: 77, w: 1.2, s: 'cau_123', r: 'Cầu 1-2-3' });
@@ -286,21 +268,18 @@ class InfinityPredictor {
             if (l6 === 'XXXTTX') signals.push({ p: 'T', c: 76, w: 1.2, s: 'cau_321', r: 'Cầu 3-2-1' });
         }
 
-        // Zigzag
         if (n >= 7) {
             let sw = 0;
             for (let i = n - 6; i < n; i++) if (results[i] !== results[i - 1]) sw++;
             if (sw >= 5) signals.push({ p: last === 'T' ? 'X' : 'T', c: 68 + sw * 2, w: 1.0 + sw * 0.1, s: 'zigzag', r: `Zigzag ${sw}` });
         }
 
-        // Tam giác
         if (n >= 5) {
             let l5 = results.slice(-5).join('');
             if (l5 === 'TXTXT') signals.push({ p: 'X', c: 80, w: 1.2, s: 'tam_giac', r: 'Tam giác' });
             if (l5 === 'XTXTX') signals.push({ p: 'T', c: 80, w: 1.2, s: 'tam_giac', r: 'Tam giác' });
         }
 
-        // Đối xứng
         if (n >= 10) {
             let mid = Math.floor(n / 2);
             let left = results.slice(0, mid), right = results.slice(mid).reverse();
@@ -313,7 +292,6 @@ class InfinityPredictor {
             }
         }
 
-        // Cầu điểm
         if (n >= 5 && scores.length >= 5) {
             let recentScores = scores.slice(-5);
             let avg = recentScores.reduce((a, b) => a + b, 0) / 5;
@@ -321,7 +299,6 @@ class InfinityPredictor {
             else if (avg < 7) signals.push({ p: 'T', c: 65, w: 1.1, s: 'cau_dice_low', r: `Điểm TB thấp ${avg.toFixed(1)}` });
         }
 
-        // Vai đầu vai
         if (scores.length >= 15) {
             let recentScores = scores.slice(-15);
             let peaks = [];
@@ -340,9 +317,6 @@ class InfinityPredictor {
         return signals;
     }
 
-    // ============================================
-    // PHÂN TÍCH XÚC XẮC TỔNG HỢP
-    // ============================================
     analyzeDiceTotal() {
         const signals = [];
         const n = this.history.length;
@@ -356,7 +330,6 @@ class InfinityPredictor {
         if (lastSum <= 4) signals.push({ p: 'T', c: 94, w: 2.5, s: 'dice_sum_4', r: `Tổng ${lastSum}` });
         else if (lastSum <= 6) signals.push({ p: 'T', c: 72, w: 1.4, s: 'dice_sum_6', r: `Tổng ${lastSum}` });
 
-        // Tổng sau tổng
         let sumAfter = {};
         for (let i = 0; i < n - 1; i++) {
             if (!this.history[i].dice || !this.history[i + 1].dice) continue;
@@ -376,9 +349,6 @@ class InfinityPredictor {
         return signals;
     }
 
-    // ============================================
-    // DỰ ĐOÁN TỪ BỘ NHỚ KÉP
-    // ============================================
     predictFromDualMemory(results) {
         const signals = [];
         if (results.length < 5) return signals;
@@ -399,9 +369,6 @@ class InfinityPredictor {
         return signals;
     }
 
-    // ============================================
-    // 🎯 DỰ ĐOÁN VÔ CỰC
-    // ============================================
     predict() {
         const n = this.history.length;
         if (n < 5) return { prediction: 'Cần thêm dữ liệu', confidence: 0, wait: true };
@@ -455,7 +422,6 @@ class InfinityPredictor {
         });
         if (this.predictions.length > 500) this.predictions.shift();
 
-        // Cập nhật bộ nhớ kép
         const recentPattern = results.slice(-5).join('');
         const memory = results[n - 1] === 'T' ? this.dualMemory.win : this.dualMemory.lose;
         memory.patterns.set(recentPattern, (memory.patterns.get(recentPattern) || 0) + 1);
@@ -563,8 +529,7 @@ app.get("/taixiu", async (req, res) => {
     try {
         const response = await axios.get(API_URL, { timeout: 10000 });
         const rawData = response.data;
-        const dataArray = rawData.data || rawData || [];
-        let history = normalizeData(Array.isArray(dataArray) ? dataArray : [dataArray]);
+        let history = normalizeData(rawData);
 
         for (let item of history) {
             if (item.phien > lastScannedPhien) {
@@ -613,8 +578,7 @@ app.get("/", async (req, res) => {
     try {
         const response = await axios.get(API_URL, { timeout: 10000 });
         const rawData = response.data;
-        const dataArray = rawData.data || rawData || [];
-        let history = normalizeData(Array.isArray(dataArray) ? dataArray : [dataArray]);
+        let history = normalizeData(rawData);
 
         for (let item of history) {
             if (item.phien > lastScannedPhien) {
@@ -671,13 +635,13 @@ async function autoScan() {
         try {
             const response = await axios.get(API_URL, { timeout: 5000 });
             const rawData = response.data;
-            const dataArray = rawData.data || rawData || [];
-            let history = normalizeData(Array.isArray(dataArray) ? dataArray : [dataArray]);
+            let history = normalizeData(rawData);
 
             for (let item of history) {
                 if (item.phien > lastScannedPhien) {
                     infinityAI.addSession(item);
                     lastScannedPhien = item.phien;
+                    console.log(`📡 Phiên mới: #${item.phien} | ${item.ket_qua} | ${item.x1}-${item.x2}-${item.x3} = ${item.tong}`);
                 }
             }
 
@@ -688,11 +652,14 @@ async function autoScan() {
                     infinityAI.feedback(latest.ket_qua === 'tài' ? 'Tài' : 'Xỉu');
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+            console.log('⏳ Đang chờ kết nối API...');
+        }
     }, 1000);
 }
 
 app.listen(PORT, () => {
     console.log("♾️ Server Infinity chạy tại port " + PORT);
+    console.log("🔗 API: " + API_URL);
     autoScan();
 });
