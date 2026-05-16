@@ -22,20 +22,35 @@ function loadDB() {
 }
 
 // ======================================================
-// FORMAT DATA - Hỗ trợ cả 2 loại API
+// FORMAT DATA - SỬA LỖI PARSE
 // ======================================================
 function normalizeData(rawData) {
-    // API trả về { total: X, data: [...] }
-    let data;
-    if (rawData.data && Array.isArray(rawData.data)) {
+    console.log("Raw API response type:", typeof rawData);
+    console.log("Raw API response keys:", rawData ? Object.keys(rawData) : 'null/undefined');
+    
+    let data = [];
+    
+    // API trả về { total: 18, data: [...] }
+    if (rawData && rawData.data && Array.isArray(rawData.data)) {
         data = rawData.data;
-    } else if (Array.isArray(rawData)) {
+        console.log("Parsed as { data: [...] } format, length:", data.length);
+    }
+    // API trả về mảng trực tiếp
+    else if (Array.isArray(rawData)) {
         data = rawData;
-    } else {
+        console.log("Parsed as direct array, length:", data.length);
+    }
+    // API trả về object đơn
+    else if (rawData && typeof rawData === 'object') {
         data = [rawData];
+        console.log("Parsed as single object");
+    }
+    else {
+        console.log("Could not parse API response:", JSON.stringify(rawData).substring(0, 200));
+        return [];
     }
     
-    return data.map(item => {
+    const result = data.map(item => {
         const d1 = item.xuc_xac_1 || item.x1 || 0;
         const d2 = item.xuc_xac_2 || item.x2 || 0;
         const d3 = item.xuc_xac_3 || item.x3 || 0;
@@ -51,6 +66,14 @@ function normalizeData(rawData) {
             dice: [d1, d2, d3]
         };
     }).filter(item => item.phien > 0 && item.tong >= 3 && item.tong <= 18);
+    
+    console.log("Normalized data length:", result.length);
+    if (result.length > 0) {
+        console.log("First item:", JSON.stringify(result[0]));
+        console.log("Last item:", JSON.stringify(result[result.length - 1]));
+    }
+    
+    return result;
 }
 
 // ======================================================
@@ -83,7 +106,6 @@ class InfinityPredictor {
 
         this.loadFromFile();
         console.log('♾️ INFINITY PREDICTOR: VÔ CỰC ĐÃ KÍCH HOẠT');
-        console.log('🔗 API: ' + API_URL);
     }
 
     loadFromFile() {
@@ -96,7 +118,6 @@ class InfinityPredictor {
                     this.cauWeights.set(k, v);
                 }
             }
-            console.log('📂 Đã tải dữ liệu học: ' + this.accuracy.total + ' lần dự đoán');
         }
     }
 
@@ -371,10 +392,18 @@ class InfinityPredictor {
 
     predict() {
         const n = this.history.length;
-        if (n < 5) return { prediction: 'Cần thêm dữ liệu', confidence: 0, wait: true };
+        console.log("predict() called, history length:", n);
+        
+        if (n < 5) {
+            console.log("Not enough history (<5), returning wait");
+            return { prediction: 'Cần thêm dữ liệu', confidence: 0, wait: true };
+        }
 
         const results = this.getResults();
         const scores = this.getScores();
+        
+        console.log("Results last 5:", results.slice(-5));
+        console.log("Scores last 5:", scores.slice(-5));
 
         const allSignals = [
             ...this.analyzeBiet(results),
@@ -383,6 +412,8 @@ class InfinityPredictor {
             ...this.predictFromIndividualDice(),
             ...this.predictFromDualMemory(results)
         ];
+
+        console.log("Total signals:", allSignals.length);
 
         if (allSignals.length === 0) {
             return { prediction: results[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 50 };
@@ -426,6 +457,7 @@ class InfinityPredictor {
         const memory = results[n - 1] === 'T' ? this.dualMemory.win : this.dualMemory.lose;
         memory.patterns.set(recentPattern, (memory.patterns.get(recentPattern) || 0) + 1);
 
+        console.log("Prediction result:", finalPred === 'T' ? 'Tài' : 'Xỉu', confidence);
         return {
             prediction: finalPred === 'T' ? 'Tài' : 'Xỉu',
             confidence,
@@ -438,7 +470,10 @@ class InfinityPredictor {
         let result = sessionData.result || sessionData.ket_qua || '';
         if (result === 'Tài' || result === 'T') result = 'Tài';
         else if (result === 'Xỉu' || result === 'X') result = 'Xỉu';
-        else return;
+        else {
+            console.log("Invalid result:", result);
+            return;
+        }
 
         const d1 = sessionData.x1 || sessionData.xuc_xac_1 || 0;
         const d2 = sessionData.x2 || sessionData.xuc_xac_2 || 0;
@@ -450,6 +485,8 @@ class InfinityPredictor {
             dice: [d1, d2, d3],
             timestamp: Date.now()
         });
+        console.log(`Added session: ${result} | ${d1}-${d2}-${d3} | History size: ${this.history.length}`);
+        
         if (this.history.length > 3000) this.history = this.history.slice(-2500);
 
         if (d1 > 0) this.updateDiceAnalysis(d1, d2, d3, result);
@@ -527,9 +564,13 @@ let lastScannedPhien = 0;
 // ======================================================
 app.get("/taixiu", async (req, res) => {
     try {
+        console.log("GET /taixiu called");
         const response = await axios.get(API_URL, { timeout: 10000 });
+        console.log("API response status:", response.status);
         const rawData = response.data;
         let history = normalizeData(rawData);
+        
+        console.log("Normalized history length:", history.length);
 
         for (let item of history) {
             if (item.phien > lastScannedPhien) {
@@ -537,8 +578,11 @@ app.get("/taixiu", async (req, res) => {
                 lastScannedPhien = item.phien;
             }
         }
+        
+        console.log("AI history length:", infinityAI.history.length);
 
         if (infinityAI.history.length < 5) {
+            console.log("Not enough data, returning default");
             return res.json({
                 id: "AnhKhoidzai Sunwin",
                 phien_truoc: history.length > 0 ? history[history.length - 1].phien : 0,
@@ -558,6 +602,17 @@ app.get("/taixiu", async (req, res) => {
         let pattern = analyzeCauDetail(history);
         let predict = infinityAI.predict();
 
+        console.log("Sending response:", JSON.stringify({
+            id: "AnhKhoidzai Sunwin",
+            phien_truoc: latest.phien,
+            xuc_xac1: latest.x1, xuc_xac2: latest.x2, xuc_xac3: latest.x3,
+            tong: latest.tong, ket_qua: latest.ket_qua,
+            pattern: pattern,
+            phien_hien_tai: latest.phien + 1,
+            du_doan: predict.prediction === 'Tài' ? 'tài' : 'xỉu',
+            do_tin_cay: predict.confidence + "%"
+        }));
+
         res.json({
             id: "AnhKhoidzai Sunwin",
             phien_truoc: latest.phien,
@@ -570,13 +625,17 @@ app.get("/taixiu", async (req, res) => {
         });
 
     } catch (err) {
-        res.json({ id: "AnhKhoidzai Sunwin", phien_truoc: 0, xuc_xac1: 0, xuc_xac2: 0, xuc_xac3: 0, tong: 0, ket_qua: "tài", pattern: "[Đang kết nối...]", phien_hien_tai: 0, du_doan: "tài", do_tin_cay: "52%" });
+        console.log("ERROR in /taixiu:", err.message);
+        console.log("Error stack:", err.stack);
+        res.json({ id: "AnhKhoidzai Sunwin", phien_truoc: 0, xuc_xac1: 0, xuc_xac2: 0, xuc_xac3: 0, tong: 0, ket_qua: "tài", pattern: "[Lỗi: " + err.message + "]", phien_hien_tai: 0, du_doan: "tài", do_tin_cay: "52%" });
     }
 });
 
 app.get("/", async (req, res) => {
     try {
+        console.log("GET / called");
         const response = await axios.get(API_URL, { timeout: 10000 });
+        console.log("API response status:", response.status);
         const rawData = response.data;
         let history = normalizeData(rawData);
 
@@ -622,7 +681,8 @@ app.get("/", async (req, res) => {
         res.json(result);
 
     } catch (err) {
-        res.json({ id: "AnhKhoidzai Sunwin", phien_truoc: 0, xuc_xac1: 0, xuc_xac2: 0, xuc_xac3: 0, tong: 0, ket_qua: "tài", pattern: "[Đang kết nối...]", phien_hien_tai: 0, du_doan: "tài", do_tin_cay: "52%" });
+        console.log("ERROR in /:", err.message);
+        res.json({ id: "AnhKhoidzai Sunwin", phien_truoc: 0, xuc_xac1: 0, xuc_xac2: 0, xuc_xac3: 0, tong: 0, ket_qua: "tài", pattern: "[Lỗi: " + err.message + "]", phien_hien_tai: 0, du_doan: "tài", do_tin_cay: "52%" });
     }
 });
 
@@ -653,7 +713,7 @@ async function autoScan() {
                 }
             }
         } catch (e) {
-            console.log('⏳ Đang chờ kết nối API...');
+            console.log('⏳ Lỗi quét API:', e.message);
         }
     }, 1000);
 }
