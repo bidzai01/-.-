@@ -36,33 +36,33 @@ function normalizeData(rawData) {
 }
 
 // ======================================================
-// 🌟 SUPREME MAX PRO VIP - 50 THUẬT TOÁN
+// 🌟 SUPREME ULTIMATE - 50+ THUẬT TOÁN
 // ======================================================
-class SupremeMaxPro {
+class SupremeUltimate {
     constructor() {
         this.history = [];
-        
-        // Trọng số 50 thuật toán
+        this.last8 = [];
+
         this.weights = {
-            biet_2: 0.5, biet_3: 0.8, biet_4: 1.2, biet_5: 1.5, biet_6: 1.8, biet_7: 2.0, biet_8: 2.2, biet_9: 2.3, biet_10: 2.5,
-            cau_11: 1.2, cau_22: 1.3, cau_33: 1.4, cau_44: 1.2, cau_55: 1.0,
-            cau_123: 1.1, cau_321: 1.1, cau_1212: 1.0, cau_1122: 1.0, cau_1221: 0.9, cau_2112: 0.9,
-            zigzag: 0.9, doi_xung: 0.8, tam_giac: 1.0, bac_thang: 0.7, biet_kep: 1.3,
-            rong: 2.0, ho: 2.0, nem: 0.8, co: 0.8, hcn: 0.7, vai_dau_vai: 1.2,
-            hai_dinh: 1.0, hai_day: 1.0, diamond: 0.7, con_soi: 0.7, elliot: 0.6,
+            biet_3: 0.8, biet_4: 1.2, biet_5: 1.5, biet_6: 1.8, biet_7: 2.0, biet_8: 2.2, biet_10: 2.5,
+            cau_11: 1.2, cau_22: 1.3, cau_33: 1.4, cau_44: 1.2,
+            cau_123: 1.1, cau_321: 1.1, cau_1212: 1.0, cau_1122: 1.0,
+            zigzag: 0.9, doi_xung: 0.8, tam_giac: 1.0,
+            rong: 2.0, ho: 2.0, vai_dau_vai: 1.2, hai_dinh: 1.0, hai_day: 1.0,
             sum_cuc_cao: 2.5, sum_cao: 1.8, sum_cuc_thap: 2.5, sum_thap: 1.5,
-            triple: 2.2, pair: 1.4, dice_trans: 1.1, dice_hl: 1.0, dice_oe: 0.8, dice_prime: 0.7,
+            triple: 2.2, pair: 1.4, dice_trans: 1.1, dice_hl: 1.0, dice_oe: 0.8,
             sum_after: 1.2, momentum: 1.0, hot: 0.7, cold: 0.6, dev: 0.8,
-            pattern: 1.2, trend: 1.1, switch: 1.0, score: 1.5, memory: 1.1
+            pattern: 1.2, trend: 1.1, score: 1.5, memory: 1.1
         };
 
-        // Xúc xắc
         this.diceDB = {
             d1: { freq: {}, trans: {}, hot: 3, cold: 3 },
             d2: { freq: {}, trans: {}, hot: 3, cold: 3 },
             d3: { freq: {}, trans: {}, hot: 3, cold: 3 },
             triples: {}, sumAf: {}, sumMom: [], hl: {}, oe: {}, dev: {}
         };
+
+        this.mem = { patterns: {}, success: {}, fail: {} };
     }
 
     updateDice(d1, d2, d3) {
@@ -74,10 +74,7 @@ class SupremeMaxPro {
             o.freq[f] = (o.freq[f] || 0) + 1;
             if (this.history.length > 0) {
                 const prev = this.history[this.history.length - 1];
-                if (prev.dice) {
-                    const pf = prev.dice[i];
-                    o.trans[`${pf}->${f}`] = (o.trans[`${pf}->${f}`] || 0) + 1;
-                }
+                if (prev.dice) o.trans[`${prev.dice[i]}->${f}`] = (o.trans[`${prev.dice[i]}->${f}`] || 0) + 1;
             }
         }
         for (const k of keys) {
@@ -89,10 +86,7 @@ class SupremeMaxPro {
         const sum = d1 + d2 + d3; this.diceDB.sumMom.push(sum); if (this.diceDB.sumMom.length > 30) this.diceDB.sumMom.shift();
         if (this.history.length > 0) {
             const prev = this.history[this.history.length - 1];
-            if (prev.dice) {
-                const ps = prev.dice.reduce((a, b) => a + b, 0);
-                this.diceDB.sumAf[`${ps}->${sum}`] = (this.diceDB.sumAf[`${ps}->${sum}`] || 0) + 1;
-            }
+            if (prev.dice) this.diceDB.sumAf[`${prev.dice.reduce((a, b) => a + b, 0)}->${sum}`] = (this.diceDB.sumAf[`${prev.dice.reduce((a, b) => a + b, 0)}->${sum}`] || 0) + 1;
         }
         const hl = arr.map(d => d >= 4 ? 'H' : 'L').join(''); this.diceDB.hl[hl] = (this.diceDB.hl[hl] || 0) + 1;
         const oe = arr.map(d => d % 2 === 0 ? 'C' : 'L').join(''); this.diceDB.oe[oe] = (this.diceDB.oe[oe] || 0) + 1;
@@ -112,6 +106,7 @@ class SupremeMaxPro {
         this.updateDice(d1, d2, d3);
         this.history.push({ phien: id, result: normRes, total, dice: [d1, d2, d3] });
         if (this.history.length > 500) this.history.splice(0, 100);
+        this.last8 = this.history.slice(-8);
     }
 
     getStreaks(R) {
@@ -119,9 +114,9 @@ class SupremeMaxPro {
         let cur = 1, ct = R[0];
         for (let i = 1; i < R.length; i++) {
             if (R[i] === ct) cur++;
-            else { if (cur >= 3) all.push({ type: ct, len: cur }); ct = R[i]; cur = 1; }
+            else { if (cur >= 2) all.push({ type: ct, len: cur }); ct = R[i]; cur = 1; }
         }
-        if (cur >= 3) all.push({ type: ct, len: cur });
+        if (cur >= 2) all.push({ type: ct, len: cur });
         return all;
     }
 
@@ -135,11 +130,6 @@ class SupremeMaxPro {
         return Math.min(0.9, Math.max(0.1, exact / total + streak * 0.02));
     }
 
-    // ============================================
-    // 50 THUẬT TOÁN
-    // ============================================
-
-    // 1-9: Bệt các cấp
     analyzeBiet(R) {
         const n = R.length;
         if (n < 2) return [];
@@ -151,14 +141,10 @@ class SupremeMaxPro {
         const bp = this.calcBP(allStreaks, last, streak);
 
         if (streak >= 10) S.push({ p: last === 'T' ? 'X' : 'T', c: 90, w: this.weights.biet_10, s: 'biet_10' });
-        else if (streak >= 8) S.push({ p: last === 'T' ? 'X' : 'T', c: 84, w: this.weights.biet_8, s: 'biet_8' });
-        else if (streak >= 6) S.push({ p: last === 'T' ? 'X' : 'T', c: 76, w: this.weights.biet_6, s: 'biet_6' });
-        else if (streak >= 4) {
-            const pred = bp > 0.55 ? (last === 'T' ? 'X' : 'T') : last;
-            S.push({ p: pred, c: 64, w: this.weights.biet_4, s: 'biet_4' });
-        }
+        else if (streak >= 7) S.push({ p: last === 'T' ? 'X' : 'T', c: 80, w: this.weights.biet_7, s: 'biet_7' });
+        else if (streak >= 5) { const pred = bp > 0.55 ? (last === 'T' ? 'X' : 'T') : last; S.push({ p: pred, c: 68, w: this.weights.biet_5, s: 'biet_5' }); }
+        else if (streak >= 3) S.push({ p: last, c: 55, w: this.weights.biet_3, s: 'biet_3' });
 
-        // Rồng/Hổ
         let tR = 0, xR = 0;
         for (let i = n - 1; i >= 0 && R[i] === 'T'; i--) tR++;
         for (let i = n - 1; i >= 0 && R[i] === 'X'; i--) xR++;
@@ -170,7 +156,6 @@ class SupremeMaxPro {
         return S;
     }
 
-    // 10-20: Cầu các loại
     analyzeCau(R) {
         const n = R.length;
         if (n < 4) return [];
@@ -233,7 +218,6 @@ class SupremeMaxPro {
         return S;
     }
 
-    // 21-35: Xúc xắc
     analyzeDice() {
         const n = this.history.length;
         if (n < 3) return [];
@@ -279,7 +263,6 @@ class SupremeMaxPro {
         return S;
     }
 
-    // 36-45: Pattern & Trend
     analyzePatternTrend(R, scores) {
         const n = R.length;
         if (n < 5) return [];
@@ -321,32 +304,6 @@ class SupremeMaxPro {
         return S;
     }
 
-    // 46-50: Nâng cao
-    analyzeAdvanced(R, scores) {
-        const n = R.length;
-        if (n < 10) return [];
-        const S = [];
-
-        if (scores.length >= 15) {
-            const rs = scores.slice(-15);
-            const peaks = [];
-            for (let i = 2; i < rs.length - 2; i++) {
-                if (rs[i] > rs[i - 1] && rs[i] > rs[i - 2] && rs[i] > rs[i + 1] && rs[i] > rs[i + 2]) peaks.push({ val: rs[i] });
-            }
-            if (peaks.length >= 3) {
-                const l3 = peaks.slice(-3);
-                if (l3[0].val < l3[1].val && l3[2].val < l3[1].val && Math.abs(l3[0].val - l3[2].val) <= 2) {
-                    S.push({ p: 'X', c: 72, w: this.weights.vai_dau_vai, s: 'vai_dau_vai' });
-                }
-            }
-        }
-
-        return S;
-    }
-
-    // ============================================
-    // DỰ ĐOÁN - % ỔN ĐỊNH
-    // ============================================
     predict() {
         const n = this.history.length;
         if (n < 5) return { prediction: 'Cần thêm dữ liệu', confidence: 50 };
@@ -358,13 +315,10 @@ class SupremeMaxPro {
             ...this.analyzeBiet(R),
             ...this.analyzeCau(R),
             ...this.analyzeDice(),
-            ...this.analyzePatternTrend(R, scores),
-            ...this.analyzeAdvanced(R, scores)
+            ...this.analyzePatternTrend(R, scores)
         ];
 
-        if (all.length === 0) {
-            return { prediction: R[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 52 };
-        }
+        if (all.length === 0) return { prediction: R[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 52 };
 
         all.sort((a, b) => (b.w * b.c) - (a.w * a.c));
         const top = all.slice(0, 30);
@@ -382,19 +336,13 @@ class SupremeMaxPro {
         const finalPred = probT > 0.5 ? 'T' : 'X';
         let conf = Math.round(Math.abs(probT - 0.5) * 2 * 100);
 
-        // Giới hạn confidence dựa trên số lượng tín hiệu
         if (all.length < 3) conf = Math.min(conf, 60);
         else if (all.length < 5) conf = Math.min(conf, 70);
         else if (all.length < 8) conf = Math.min(conf, 80);
 
-        // Đồng thuận
-        const t3 = top.slice(0, 3);
-        const t5 = top.slice(0, 5);
-        const agree3 = t3.every(s => s.p === t3[0].p);
-        const agree5 = t5.every(s => s.p === t5[0].p);
-
-        if (agree5 && all.length >= 8) conf = Math.min(90, conf + 8);
-        else if (agree3 && all.length >= 5) conf = Math.min(84, conf + 4);
+        const t3 = top.slice(0, 3), t5 = top.slice(0, 5);
+        if (t5.every(s => s.p === t5[0].p) && all.length >= 8) conf = Math.min(90, conf + 8);
+        else if (t3.every(s => s.p === t3[0].p) && all.length >= 5) conf = Math.min(84, conf + 4);
 
         conf = Math.max(52, Math.min(90, conf));
         if (Math.abs(probT - 0.5) < 0.05) conf = Math.min(conf, 58);
@@ -410,7 +358,7 @@ class SupremeMaxPro {
 // ======================================================
 // KHỞI TẠO AI
 // ======================================================
-const supremeAI = new SupremeMaxPro();
+const supremeAI = new SupremeUltimate();
 
 // ======================================================
 // ANALYZE CAU - 8 PHIÊN
@@ -530,7 +478,32 @@ app.get("/taixiu", async (req, res) => {
     }
 });
 
+// ======================================================
+// AUTO SCAN MỖI 1 GIÂY
+// ======================================================
+async function autoScan() {
+    console.log("🔄 Bắt đầu quét API mỗi 1 giây...");
+    setInterval(async () => {
+        try {
+            const response = await axios.get(API_URL, { timeout: 5000 });
+            const rawData = response.data;
+            const history = normalizeData(rawData);
+
+            for (const item of history) {
+                if (item.phien > lastPhien) {
+                    globalHistory.push(item);
+                    supremeAI.addSession(item);
+                    lastPhien = item.phien;
+                    console.log(`📡 Phiên mới: #${item.phien} | ${item.ket_qua} | ${item.x1}-${item.x2}-${item.x3} = ${item.tong}`);
+                }
+            }
+            if (globalHistory.length > 200) globalHistory = globalHistory.slice(-200);
+        } catch (e) {}
+    }, 1000);
+}
+
 app.listen(PORT, () => {
-    console.log("🌟 Supreme Max Pro VIP chạy tại port " + PORT);
+    console.log("🌟 Supreme Ultimate chạy tại port " + PORT);
     console.log("🔗 API: " + API_URL);
+    autoScan();
 });
