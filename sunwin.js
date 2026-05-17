@@ -36,24 +36,18 @@ function normalizeData(rawData) {
 }
 
 // ======================================================
-// 🌟 SUPREME ULTIMATE - 50+ THUẬT TOÁN
+// 🌟 SUPREME ULTIMATE V3 - FINAL BOSS
 // ======================================================
-class SupremeUltimate {
+class SupremeUltimateV3 {
     constructor() {
         this.history = [];
         this.last8 = [];
 
-        this.weights = {
-            biet_3: 0.8, biet_4: 1.2, biet_5: 1.5, biet_6: 1.8, biet_7: 2.0, biet_8: 2.2, biet_10: 2.5,
-            cau_11: 1.2, cau_22: 1.3, cau_33: 1.4, cau_44: 1.2,
-            cau_123: 1.1, cau_321: 1.1, cau_1212: 1.0, cau_1122: 1.0,
-            zigzag: 0.9, doi_xung: 0.8, tam_giac: 1.0,
-            rong: 2.0, ho: 2.0, vai_dau_vai: 1.2, hai_dinh: 1.0, hai_day: 1.0,
-            sum_cuc_cao: 2.5, sum_cao: 1.8, sum_cuc_thap: 2.5, sum_thap: 1.5,
-            triple: 2.2, pair: 1.4, dice_trans: 1.1, dice_hl: 1.0, dice_oe: 0.8,
-            sum_after: 1.2, momentum: 1.0, hot: 0.7, cold: 0.6, dev: 0.8,
-            pattern: 1.2, trend: 1.1, score: 1.5, memory: 1.1
-        };
+        const ALL_KEYS = ['biet_2','biet_3','biet_4','biet_5','biet_6','biet_7','biet_8','biet_10','cau_11','cau_22','cau_33','cau_44','cau_55','cau_123','cau_321','cau_1212','cau_1122','zigzag','doi_xung','tam_giac','bac_thang','biet_kep','rong','ho','nem','co','vai_dau_vai','hai_dinh','hai_day','sum_cuc_cao','sum_cao','sum_cuc_thap','sum_thap','triple','pair','dice_trans','dice_hl','dice_oe','sum_after','momentum','hot','cold','dev','pattern','trend','switch_rate','score','memory','entropy'];
+        
+        this.weights = {};
+        this.perf = {};
+        ALL_KEYS.forEach(k => { this.weights[k] = 1.0; this.perf[k] = { ok: 0, all: 0 }; });
 
         this.diceDB = {
             d1: { freq: {}, trans: {}, hot: 3, cold: 3 },
@@ -120,7 +114,8 @@ class SupremeUltimate {
         return all;
     }
 
-    calcBP(allStreaks, last, streak) {
+    calcBP(R, last, streak) {
+        const allStreaks = this.getStreaks(R);
         const sameType = allStreaks.filter(s => s.type === last);
         if (sameType.length === 0) return 0.5;
         const exact = sameType.filter(s => s.len === streak).length;
@@ -137,8 +132,7 @@ class SupremeUltimate {
         const last = R[n - 1];
         let streak = 1;
         for (let i = n - 2; i >= 0; i--) { if (R[i] === last) streak++; else break; }
-        const allStreaks = this.getStreaks(R);
-        const bp = this.calcBP(allStreaks, last, streak);
+        const bp = this.calcBP(R, last, streak);
 
         if (streak >= 10) S.push({ p: last === 'T' ? 'X' : 'T', c: 90, w: this.weights.biet_10, s: 'biet_10' });
         else if (streak >= 7) S.push({ p: last === 'T' ? 'X' : 'T', c: 80, w: this.weights.biet_7, s: 'biet_7' });
@@ -304,6 +298,28 @@ class SupremeUltimate {
         return S;
     }
 
+    analyzeAdvanced(R, scores) {
+        const n = R.length;
+        if (n < 10) return [];
+        const S = [];
+
+        if (scores.length >= 15) {
+            const rs = scores.slice(-15);
+            const peaks = [];
+            for (let i = 2; i < rs.length - 2; i++) {
+                if (rs[i] > rs[i - 1] && rs[i] > rs[i - 2] && rs[i] > rs[i + 1] && rs[i] > rs[i + 2]) peaks.push({ val: rs[i] });
+            }
+            if (peaks.length >= 3) {
+                const l3 = peaks.slice(-3);
+                if (l3[0].val < l3[1].val && l3[2].val < l3[1].val && Math.abs(l3[0].val - l3[2].val) <= 2) {
+                    S.push({ p: 'X', c: 72, w: this.weights.vai_dau_vai, s: 'vai_dau_vai' });
+                }
+            }
+        }
+
+        return S;
+    }
+
     predict() {
         const n = this.history.length;
         if (n < 5) return { prediction: 'Cần thêm dữ liệu', confidence: 50 };
@@ -315,7 +331,8 @@ class SupremeUltimate {
             ...this.analyzeBiet(R),
             ...this.analyzeCau(R),
             ...this.analyzeDice(),
-            ...this.analyzePatternTrend(R, scores)
+            ...this.analyzePatternTrend(R, scores),
+            ...this.analyzeAdvanced(R, scores)
         ];
 
         if (all.length === 0) return { prediction: R[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 52 };
@@ -358,7 +375,7 @@ class SupremeUltimate {
 // ======================================================
 // KHỞI TẠO AI
 // ======================================================
-const supremeAI = new SupremeUltimate();
+const supremeAI = new SupremeUltimateV3();
 
 // ======================================================
 // ANALYZE CAU - 8 PHIÊN
@@ -494,7 +511,6 @@ async function autoScan() {
                     globalHistory.push(item);
                     supremeAI.addSession(item);
                     lastPhien = item.phien;
-                    console.log(`📡 Phiên mới: #${item.phien} | ${item.ket_qua} | ${item.x1}-${item.x2}-${item.x3} = ${item.tong}`);
                 }
             }
             if (globalHistory.length > 200) globalHistory = globalHistory.slice(-200);
@@ -503,7 +519,7 @@ async function autoScan() {
 }
 
 app.listen(PORT, () => {
-    console.log("🌟 Supreme Ultimate chạy tại port " + PORT);
+    console.log("🌟 Supreme Ultimate V3 chạy tại port " + PORT);
     console.log("🔗 API: " + API_URL);
     autoScan();
 });
