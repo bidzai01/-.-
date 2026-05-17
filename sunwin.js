@@ -23,13 +23,9 @@ function loadStats() {
         }
     } catch (e) {}
     return {
-        totalPredictions: 0,
-        totalCorrect: 0,
-        totalWrong: 0,
-        currentWinStreak: 0,
-        currentLoseStreak: 0,
-        maxWinStreak: 0,
-        maxLoseStreak: 0,
+        totalPredictions: 0, totalCorrect: 0, totalWrong: 0,
+        currentWinStreak: 0, currentLoseStreak: 0,
+        maxWinStreak: 0, maxLoseStreak: 0,
         predictionLog: [],
         performance: {}
     };
@@ -49,7 +45,6 @@ function normalizeData(rawData) {
     } else if (rawData && typeof rawData === 'object') {
         data = [rawData];
     }
-
     return data.map(item => {
         const d1 = item.xuc_xac_1 || 0;
         const d2 = item.xuc_xac_2 || 0;
@@ -69,7 +64,7 @@ function normalizeData(rawData) {
 }
 
 // ======================================================
-// 🎯 MASTER ANALYZER V2
+// 🎯 MASTER ANALYZER V2 - FULL UPGRADE
 // ======================================================
 class MasterAnalyzerV2 {
     constructor() {
@@ -78,6 +73,7 @@ class MasterAnalyzerV2 {
         this.stats = { correct: 0, total: 0, win: 0, maxWin: 0, lose: 0 };
         this.performance = {};
         this.diceMemory = new Map();
+        this.patternMemory = new Map();
     }
 
     calcBreakProb(results, result, streak) {
@@ -88,7 +84,12 @@ class MasterAnalyzerV2 {
         const longerMatch = sameType.filter(s => s.len > streak).length;
         const total = exactMatch + longerMatch;
         if (total === 0) return streak > 8 ? 0.7 : 0.5;
-        return Math.min(0.9, Math.max(0.1, exactMatch / total + streak * 0.02));
+        let prob = exactMatch / total;
+        const recentStreaks = sameType.filter(s => s.endIdx > results.length - 50);
+        if (recentStreaks.length > 0) {
+            prob = prob * 0.4 + (recentStreaks.filter(s => s.len > streak).length / recentStreaks.length) * 0.6;
+        }
+        return Math.min(0.9, Math.max(0.1, prob + streak * 0.02));
     }
 
     extractAllStreaks(results) {
@@ -106,17 +107,15 @@ class MasterAnalyzerV2 {
     }
 
     // ============================================
-    // 1. PHÂN TÍCH BỆT
+    // 1. PHÂN TÍCH BỆT SIÊU CHUẨN
     // ============================================
     analyzeBiet(results, scores) {
         const n = results.length;
         if (n < 2) return [];
         const signals = [];
         const last = results[n - 1];
-
         let streak = 1;
         for (let i = n - 2; i >= 0; i--) { if (results[i] === last) streak++; else break; }
-
         const breakProb = this.calcBreakProb(results, last, streak);
 
         if (streak >= 10) signals.push({ p: last === 'T' ? 'X' : 'T', c: 97, w: 3.0, s: 'biet_sieu_dai', r: `Bệt siêu dài ${streak}` });
@@ -129,11 +128,20 @@ class MasterAnalyzerV2 {
             signals.push({ p: last, c: 58 + streak * 2, w: 1.3, s: 'biet_ngan', r: `Bệt ngắn ${streak}` });
         }
 
+        // Bệt với điểm số
+        if (streak >= 4) {
+            const streakScores = scores.slice(-streak);
+            const avgScore = streakScores.reduce((a, b) => a + b, 0) / streak;
+            const variance = streakScores.reduce((a, b) => a + Math.pow(b - avgScore, 2), 0) / streak;
+            if (variance > 10) signals.push({ p: last === 'T' ? 'X' : 'T', c: 72, w: 1.5, s: 'biet_bien_dong', r: 'Bệt biến động cao' });
+            if ((last === 'T' && avgScore > 13.5) || (last === 'X' && avgScore < 6.5)) signals.push({ p: last === 'T' ? 'X' : 'T', c: 70, w: 1.4, s: 'biet_diem_lech', r: `Điểm TB lệch: ${avgScore.toFixed(1)}` });
+        }
+
         return signals;
     }
 
     // ============================================
-    // 2. PHÂN TÍCH CẦU
+    // 2. PHÂN TÍCH CẦU ĐA DẠNG
     // ============================================
     analyzeCau(results, scores) {
         const n = results.length;
@@ -144,18 +152,14 @@ class MasterAnalyzerV2 {
         // 1-1
         let altCount = 0;
         for (let i = n - 1; i >= 1; i--) { if (results[i] !== results[i - 1]) altCount++; else break; }
-        if (altCount >= 3) {
-            signals.push({ p: last === 'T' ? 'X' : 'T', c: Math.min(92, 65 + (altCount + 1) * 2), w: 0.8 + (altCount + 1) * 0.12, s: 'cau_11', r: `Cầu 1-1 (${altCount + 1} phiên)` });
-        }
+        if (altCount >= 3) signals.push({ p: last === 'T' ? 'X' : 'T', c: Math.min(92, 65 + (altCount + 1) * 2), w: 0.8 + (altCount + 1) * 0.12, s: 'cau_11', r: `Cầu 1-1 (${altCount + 1} phiên)` });
 
         // 2-2
         if (n >= 8) {
             let seg = results.slice(-8);
             let is22 = true;
             for (let i = 0; i < 8; i += 2) if (seg[i] !== seg[i + 1]) { is22 = false; break; }
-            if (is22 && seg[0] !== seg[2]) {
-                signals.push({ p: n % 2 === 0 ? seg[7] : (seg[7] === 'T' ? 'X' : 'T'), c: 84, w: 1.6, s: 'cau_22', r: 'Cầu 2-2' });
-            }
+            if (is22 && seg[0] !== seg[2]) signals.push({ p: n % 2 === 0 ? seg[7] : (seg[7] === 'T' ? 'X' : 'T'), c: 84, w: 1.6, s: 'cau_22', r: 'Cầu 2-2' });
         }
 
         // 3-3
@@ -166,9 +170,7 @@ class MasterAnalyzerV2 {
                 let block = seg.slice(i, i + 3);
                 if (block.length === 3 && !block.every(v => v === block[0])) { is33 = false; break; }
             }
-            if (is33 && seg[0] !== seg[3]) {
-                signals.push({ p: n % 3 === 0 ? (seg[11] === 'T' ? 'X' : 'T') : seg[11], c: 86, w: 1.5, s: 'cau_33', r: 'Cầu 3-3' });
-            }
+            if (is33 && seg[0] !== seg[3]) signals.push({ p: n % 3 === 0 ? (seg[11] === 'T' ? 'X' : 'T') : seg[11], c: 86, w: 1.5, s: 'cau_33', r: 'Cầu 3-3' });
         }
 
         // 1-2-3 & 3-2-1
@@ -218,27 +220,11 @@ class MasterAnalyzerV2 {
             }
         }
 
-        // Vai đầu vai
-        if (scores.length >= 15) {
-            let recentScores = scores.slice(-15);
-            let peaks = [];
-            for (let i = 2; i < recentScores.length - 2; i++) {
-                if (recentScores[i] > recentScores[i - 1] && recentScores[i] > recentScores[i - 2] &&
-                    recentScores[i] > recentScores[i + 1] && recentScores[i] > recentScores[i + 2]) peaks.push({ val: recentScores[i] });
-            }
-            if (peaks.length >= 3) {
-                let l3 = peaks.slice(-3);
-                if (l3[0].val < l3[1].val && l3[2].val < l3[1].val && Math.abs(l3[0].val - l3[2].val) <= 2) {
-                    signals.push({ p: 'X', c: 75, w: 1.4, s: 'vai_dau_vai', r: 'Vai đầu vai' });
-                }
-            }
-        }
-
         return signals;
     }
 
     // ============================================
-    // 3. PHÂN TÍCH XÚC XẮC
+    // 3. PHÂN TÍCH XÚC XẮC SIÊU CHUẨN
     // ============================================
     analyzeDice() {
         const n = this.history.length;
@@ -246,18 +232,14 @@ class MasterAnalyzerV2 {
         const signals = [];
         const last = this.history[n - 1];
         if (!last.dice || !last.dice[0]) return signals;
+        const sum = last.dice.reduce((a, b) => a + b, 0);
+        const triple = last.dice.join(',');
 
-        const d1 = last.dice[0], d2 = last.dice[1], d3 = last.dice[2];
-        const sum = d1 + d2 + d3;
-        const triple = `${d1},${d2},${d3}`;
-
-        // Tổng cực đoan
         if (sum >= 17) signals.push({ p: 'X', c: 96, w: 3.0, s: 'dice_sum_17', r: `Tổng ${sum}` });
         else if (sum >= 15) signals.push({ p: 'X', c: 78, w: 2.0, s: 'dice_sum_15', r: `Tổng ${sum}` });
         if (sum <= 4) signals.push({ p: 'T', c: 96, w: 3.0, s: 'dice_sum_4', r: `Tổng ${sum}` });
         else if (sum <= 6) signals.push({ p: 'T', c: 72, w: 1.5, s: 'dice_sum_6', r: `Tổng ${sum}` });
 
-        // Bộ ba lặp
         this.diceMemory.set(triple, (this.diceMemory.get(triple) || 0) + 1);
         const tripleCount = this.diceMemory.get(triple);
         if (tripleCount >= 3) {
@@ -274,23 +256,6 @@ class MasterAnalyzerV2 {
             }
         }
 
-        // Cặp xúc xắc
-        const pairs = [`${d1},${d2}`, `${d2},${d3}`, `${d1},${d3}`];
-        let pairMatch = 0, pairTai = 0;
-        for (let i = 0; i < n - 1; i++) {
-            if (!this.history[i].dice) continue;
-            const hp = [
-                `${this.history[i].dice[0]},${this.history[i].dice[1]}`,
-                `${this.history[i].dice[1]},${this.history[i].dice[2]}`,
-                `${this.history[i].dice[0]},${this.history[i].dice[2]}`
-            ];
-            if (hp.some(h => pairs.includes(h))) { pairMatch++; if (this.history[i + 1].result === 'Tài') pairTai++; }
-        }
-        if (pairMatch >= 5) {
-            const prob = pairTai / pairMatch;
-            signals.push({ p: prob > 0.5 ? 'T' : 'X', c: Math.round(50 + Math.abs(prob - 0.5) * 65), w: 1.5, s: 'dice_pair', r: `Cặp khớp ${pairMatch} lần` });
-        }
-
         return signals;
     }
 
@@ -301,10 +266,8 @@ class MasterAnalyzerV2 {
         const n = results.length;
         if (n < 5) return [];
         const signals = [];
-        const last = results[n - 1];
         const lastScore = scores[n - 1];
 
-        // Pattern matching
         for (const len of [3, 4, 5]) {
             if (n <= len) continue;
             let pattern = results.slice(-len).join('');
@@ -319,7 +282,6 @@ class MasterAnalyzerV2 {
             }
         }
 
-        // Xu hướng
         for (const window of [5, 7, 10]) {
             if (n < window) continue;
             let seg = results.slice(-window);
@@ -329,12 +291,10 @@ class MasterAnalyzerV2 {
             else if (ratio <= 0.3) signals.push({ p: 'T', c: 60 + (1 - ratio) * 25, w: 1.0 + (1 - ratio) * 0.5, s: `trend_under_${window}`, r: `Quá bán ${window} phiên` });
         }
 
-        // 5 phiên giống nhau
         let last5 = results.slice(-5);
         if (last5.every(r => r === 'T')) signals.push({ p: 'X', c: 84, w: 1.8, s: 'all_tai_5', r: '5 phiên toàn Tài' });
         if (last5.every(r => r === 'X')) signals.push({ p: 'T', c: 84, w: 1.8, s: 'all_xiu_5', r: '5 phiên toàn Xỉu' });
 
-        // Điểm cực đoan
         if (lastScore >= 17) signals.push({ p: 'X', c: 95, w: 2.5, s: 'score_17', r: 'Điểm >= 17' });
         else if (lastScore >= 15) signals.push({ p: 'X', c: 76, w: 1.5, s: 'score_15', r: 'Điểm >= 15' });
         if (lastScore <= 4) signals.push({ p: 'T', c: 95, w: 2.5, s: 'score_4', r: 'Điểm <= 4' });
@@ -360,9 +320,7 @@ class MasterAnalyzerV2 {
             ...this.analyzePatternTrend(results, scores)
         ];
 
-        if (allSignals.length === 0) {
-            return { prediction: results[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 50 };
-        }
+        if (allSignals.length === 0) return { prediction: results[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 50 };
 
         allSignals.sort((a, b) => (b.w * b.c) - (a.w * a.c));
         const topSignals = allSignals.slice(0, 40);
@@ -395,11 +353,7 @@ class MasterAnalyzerV2 {
         });
         if (this.predictions.length > 500) this.predictions.shift();
 
-        return {
-            prediction: finalPred === 'T' ? 'Tài' : 'Xỉu',
-            confidence,
-            totalSignals: allSignals.length
-        };
+        return { prediction: finalPred === 'T' ? 'Tài' : 'Xỉu', confidence, totalSignals: allSignals.length };
     }
 
     addSession(sessionData) {
@@ -407,7 +361,6 @@ class MasterAnalyzerV2 {
         if (result === 'Tài' || result === 'T') result = 'Tài';
         else if (result === 'Xỉu' || result === 'X') result = 'Xỉu';
         else return;
-
         this.history.push({
             result: result,
             tong: sessionData.tong || (sessionData.x1 + sessionData.x2 + sessionData.x3) || 0,
@@ -423,15 +376,8 @@ class MasterAnalyzerV2 {
         lastPred.actual = actualResult;
         let isCorrect = lastPred.prediction === actualResult;
         this.stats.total++;
-        if (isCorrect) {
-            this.stats.correct++;
-            this.stats.win++;
-            this.stats.lose = 0;
-            if (this.stats.win > this.stats.maxWin) this.stats.maxWin = this.stats.win;
-        } else {
-            this.stats.lose++;
-            this.stats.win = 0;
-        }
+        if (isCorrect) { this.stats.correct++; this.stats.win++; this.stats.lose = 0; if (this.stats.win > this.stats.maxWin) this.stats.maxWin = this.stats.win; }
+        else { this.stats.lose++; this.stats.win = 0; }
     }
 }
 
@@ -441,7 +387,7 @@ class MasterAnalyzerV2 {
 const masterV2 = new MasterAnalyzerV2();
 
 // ======================================================
-// ANALYZE CAU - HIỂN THỊ 7 PHIÊN
+// ANALYZE CAU - 7 PHIÊN
 // ======================================================
 function analyzeCau(history) {
     if (history.length < 7) return "[Đang thu thập...]";
@@ -449,16 +395,13 @@ function analyzeCau(history) {
     const last7 = results.slice(-7);
     const patternStr = last7.join('');
     let parts = [];
-
     let streak = 1;
     const last = last7[last7.length - 1];
     for (let i = last7.length - 2; i >= 0; i--) { if (last7[i] === last) streak++; else break; }
     if (streak >= 3) parts.push(`Bệt ${streak} ${last === 'T' ? 'Tài' : 'Xỉu'}`);
-
     let is11 = true;
     for (let i = 1; i < last7.length; i++) { if (last7[i] === last7[i - 1]) { is11 = false; break; } }
     if (is11) parts.push("Cầu 1-1");
-
     const tCount = last7.filter(r => r === 'T').length;
     if (parts.length === 0) {
         if (tCount >= 6) parts.push("Tài áp đảo");
@@ -467,7 +410,6 @@ function analyzeCau(history) {
         else if (tCount <= 2) parts.push("Nghiêng Xỉu");
         else parts.push("Cân bằng");
     }
-
     return `[${parts.join(', ')}] - ${patternStr}`;
 }
 
@@ -491,8 +433,7 @@ function updateStats(prediction, actualResult) {
     stats.predictionLog.push({
         timestamp: new Date().toISOString(),
         prediction, actual: actualResult, correct: isCorrect,
-        winStreak: stats.currentWinStreak,
-        loseStreak: stats.currentLoseStreak
+        winStreak: stats.currentWinStreak, loseStreak: stats.currentLoseStreak
     });
     if (stats.predictionLog.length > 200) stats.predictionLog = stats.predictionLog.slice(-200);
     saveStats(stats);
@@ -519,7 +460,6 @@ app.get("/", async (req, res) => {
                 globalHistory.push(item);
                 masterV2.addSession(item);
                 lastPhien = item.phien;
-
                 if (lastPrediction && globalHistory.length >= 2) {
                     const prevSession = globalHistory[globalHistory.length - 2];
                     updateStats(lastPrediction, prevSession.ket_qua);
@@ -535,9 +475,7 @@ app.get("/", async (req, res) => {
         const predict = masterV2.predict();
         lastPrediction = predict.prediction === 'Tài' ? 'tài' : 'xỉu';
 
-        const accuracy = stats.totalPredictions > 0
-            ? ((stats.totalCorrect / stats.totalPredictions) * 100).toFixed(1)
-            : '0.0';
+        const accuracy = stats.totalPredictions > 0 ? ((stats.totalCorrect / stats.totalPredictions) * 100).toFixed(1) : '0.0';
 
         const result = {
             id: "AnhKhoidzai Sunwin",
@@ -559,16 +497,11 @@ app.get("/", async (req, res) => {
                 chuoi_thua_max: stats.maxLoseStreak
             }
         };
-
         console.log("JSON:", JSON.stringify(result, null, 2));
         res.json(result);
-
     } catch (err) {
         console.log("ERROR:", err.message);
-        const accuracy = stats.totalPredictions > 0
-            ? ((stats.totalCorrect / stats.totalPredictions) * 100).toFixed(1)
-            : '0.0';
-
+        const accuracy = stats.totalPredictions > 0 ? ((stats.totalCorrect / stats.totalPredictions) * 100).toFixed(1) : '0.0';
         res.json({
             id: "AnhKhoidzai Sunwin",
             phien_truoc: 0, xuc_xac1: 0, xuc_xac2: 0, xuc_xac3: 0, tong: 0,
@@ -576,8 +509,7 @@ app.get("/", async (req, res) => {
             phien_hien_tai: 0, du_doan: "tài", do_tin_cay: "52%",
             thong_ke: {
                 tong_du_doan: stats.totalPredictions,
-                dung: stats.totalCorrect,
-                sai: stats.totalWrong,
+                dung: stats.totalCorrect, sai: stats.totalWrong,
                 ti_le_dung: accuracy + "%",
                 chuoi_thang_hien_tai: stats.currentWinStreak,
                 chuoi_thua_hien_tai: stats.currentLoseStreak,
@@ -593,7 +525,6 @@ app.get("/taixiu", async (req, res) => {
         const response = await axios.get(API_URL, { timeout: 15000 });
         const rawData = response.data;
         const history = normalizeData(rawData);
-
         for (const item of history) {
             if (item.phien > lastPhien) {
                 globalHistory.push(item);
@@ -608,16 +539,11 @@ app.get("/taixiu", async (req, res) => {
             }
         }
         if (globalHistory.length > 200) globalHistory = globalHistory.slice(-200);
-
         const latest = history[history.length - 1];
         const pattern = analyzeCau(history);
         const predict = masterV2.predict();
         lastPrediction = predict.prediction === 'Tài' ? 'tài' : 'xỉu';
-
-        const accuracy = stats.totalPredictions > 0
-            ? ((stats.totalCorrect / stats.totalPredictions) * 100).toFixed(1)
-            : '0.0';
-
+        const accuracy = stats.totalPredictions > 0 ? ((stats.totalCorrect / stats.totalPredictions) * 100).toFixed(1) : '0.0';
         res.json({
             id: "AnhKhoidzai Sunwin",
             phien_truoc: latest.phien,
@@ -629,8 +555,7 @@ app.get("/taixiu", async (req, res) => {
             do_tin_cay: predict.confidence + "%",
             thong_ke: {
                 tong_du_doan: stats.totalPredictions,
-                dung: stats.totalCorrect,
-                sai: stats.totalWrong,
+                dung: stats.totalCorrect, sai: stats.totalWrong,
                 ti_le_dung: accuracy + "%",
                 chuoi_thang_hien_tai: stats.currentWinStreak,
                 chuoi_thua_hien_tai: stats.currentLoseStreak,
@@ -639,9 +564,7 @@ app.get("/taixiu", async (req, res) => {
             }
         });
     } catch (err) {
-        const accuracy = stats.totalPredictions > 0
-            ? ((stats.totalCorrect / stats.totalPredictions) * 100).toFixed(1)
-            : '0.0';
+        const accuracy = stats.totalPredictions > 0 ? ((stats.totalCorrect / stats.totalPredictions) * 100).toFixed(1) : '0.0';
         res.json({
             id: "AnhKhoidzai Sunwin",
             phien_truoc: 0, xuc_xac1: 0, xuc_xac2: 0, xuc_xac3: 0, tong: 0,
@@ -649,8 +572,7 @@ app.get("/taixiu", async (req, res) => {
             phien_hien_tai: 0, du_doan: "tài", do_tin_cay: "52%",
             thong_ke: {
                 tong_du_doan: stats.totalPredictions,
-                dung: stats.totalCorrect,
-                sai: stats.totalWrong,
+                dung: stats.totalCorrect, sai: stats.totalWrong,
                 ti_le_dung: accuracy + "%",
                 chuoi_thang_hien_tai: stats.currentWinStreak,
                 chuoi_thua_hien_tai: stats.currentLoseStreak,
@@ -662,9 +584,7 @@ app.get("/taixiu", async (req, res) => {
 });
 
 app.get("/stats", (req, res) => {
-    const accuracy = stats.totalPredictions > 0
-        ? ((stats.totalCorrect / stats.totalPredictions) * 100).toFixed(1)
-        : '0.0';
+    const accuracy = stats.totalPredictions > 0 ? ((stats.totalCorrect / stats.totalPredictions) * 100).toFixed(1) : '0.0';
     res.json({
         tong_du_doan: stats.totalPredictions,
         dung: stats.totalCorrect,
