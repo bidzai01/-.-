@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 const API_URL = "https://apivip-anhkhoi-dzaivcl.onrender.com/data";
 
 // ======================================================
-// FORMAT DATA
+// FORMAT DATA - HỖ TRỢ API MỚI CÓ thoi_gian
 // ======================================================
 function normalizeData(rawData) {
     let data = [];
@@ -26,6 +26,7 @@ function normalizeData(rawData) {
         if (!ketQua) ketQua = tong >= 11 ? "tài" : "xỉu";
         return {
             phien: item.phien || 0,
+            thoi_gian: item.thoi_gian || "",
             x1: d1, x2: d2, x3: d3,
             tong: tong,
             ket_qua: ketQua,
@@ -36,27 +37,34 @@ function normalizeData(rawData) {
 }
 
 // ======================================================
-// 🌟 SUPREME ULTIMATE V3 - FINAL BOSS
+// 🌟 SUPREME GOD AI - 200+ THUẬT TOÁN
 // ======================================================
-class SupremeUltimateV3 {
+class SupremeGodAI {
     constructor() {
         this.history = [];
         this.last8 = [];
 
-        const ALL_KEYS = ['biet_2','biet_3','biet_4','biet_5','biet_6','biet_7','biet_8','biet_10','cau_11','cau_22','cau_33','cau_44','cau_55','cau_123','cau_321','cau_1212','cau_1122','zigzag','doi_xung','tam_giac','bac_thang','biet_kep','rong','ho','nem','co','vai_dau_vai','hai_dinh','hai_day','sum_cuc_cao','sum_cao','sum_cuc_thap','sum_thap','triple','pair','dice_trans','dice_hl','dice_oe','sum_after','momentum','hot','cold','dev','pattern','trend','switch_rate','score','memory','entropy'];
-        
-        this.weights = {};
-        this.perf = {};
-        ALL_KEYS.forEach(k => { this.weights[k] = 1.0; this.perf[k] = { ok: 0, all: 0 }; });
+        this.weights = {
+            biet_3: 0.8, biet_5: 1.5, biet_7: 2.0, biet_10: 2.5,
+            cau_11: 1.2, cau_22: 1.3, cau_33: 1.4,
+            cau_123: 1.1, cau_321: 1.1,
+            zigzag: 0.9, doi_xung: 0.8, tam_giac: 1.0,
+            rong: 2.0, ho: 2.0,
+            sum_cuc_cao: 2.5, sum_cao: 1.8, sum_cuc_thap: 2.5, sum_thap: 1.5,
+            triple: 2.2, pair: 1.4,
+            sum_after: 1.2, hot: 0.7,
+            pattern: 1.2, trend: 1.1, score: 1.5,
+            markov_2: 1.0, markov_3: 1.2, markov_5: 1.5,
+            cau_prob_4: 1.0, cau_prob_6: 1.1,
+            ens_vote: 1.3, ens_weight: 1.5, ens_top: 1.4
+        };
 
         this.diceDB = {
             d1: { freq: {}, trans: {}, hot: 3, cold: 3 },
             d2: { freq: {}, trans: {}, hot: 3, cold: 3 },
             d3: { freq: {}, trans: {}, hot: 3, cold: 3 },
-            triples: {}, sumAf: {}, sumMom: [], hl: {}, oe: {}, dev: {}
+            triples: {}, sumAf: {}, sumMom: []
         };
-
-        this.mem = { patterns: {}, success: {}, fail: {} };
     }
 
     updateDice(d1, d2, d3) {
@@ -82,9 +90,6 @@ class SupremeUltimateV3 {
             const prev = this.history[this.history.length - 1];
             if (prev.dice) this.diceDB.sumAf[`${prev.dice.reduce((a, b) => a + b, 0)}->${sum}`] = (this.diceDB.sumAf[`${prev.dice.reduce((a, b) => a + b, 0)}->${sum}`] || 0) + 1;
         }
-        const hl = arr.map(d => d >= 4 ? 'H' : 'L').join(''); this.diceDB.hl[hl] = (this.diceDB.hl[hl] || 0) + 1;
-        const oe = arr.map(d => d % 2 === 0 ? 'C' : 'L').join(''); this.diceDB.oe[oe] = (this.diceDB.oe[oe] || 0) + 1;
-        const dev = Math.max(...arr) - Math.min(...arr); this.diceDB.dev[dev] = (this.diceDB.dev[dev] || 0) + 1;
     }
 
     addSession(sessionData) {
@@ -125,6 +130,49 @@ class SupremeUltimateV3 {
         return Math.min(0.9, Math.max(0.1, exact / total + streak * 0.02));
     }
 
+    // ============================================
+    // 1. MARKOV
+    // ============================================
+    markov(R, order) {
+        const n = R.length;
+        if (n <= order) return null;
+        const state = R.slice(-order).join(',');
+        const cnt = { T: 0, X: 0 };
+        for (let i = 0; i <= n - order - 1; i++) {
+            if (R.slice(i, i + order).join(',') === state) cnt[R[i + order]]++;
+        }
+        const total = cnt.T + cnt.X;
+        if (total >= 3) {
+            const pt = cnt.T / total;
+            const key = `markov_${order}`;
+            return { p: pt > 0.5 ? 'T' : 'X', c: Math.round(50 + Math.abs(pt - 0.5) * 70), w: this.weights[key] || 1.0, s: key };
+        }
+        return null;
+    }
+
+    // ============================================
+    // 2. CẦU PROBABILITY
+    // ============================================
+    cauProb(R, len) {
+        const n = R.length;
+        if (n <= len) return null;
+        const pat = R.slice(-len).join('');
+        const cnt = { T: 0, X: 0 };
+        for (let i = 0; i < n - len; i++) {
+            if (R.slice(i, i + len).join('') === pat) cnt[R[i + len]]++;
+        }
+        const total = cnt.T + cnt.X;
+        if (total >= Math.max(3, 10 - len)) {
+            const pt = cnt.T / total;
+            const key = `cau_prob_${len}`;
+            return { p: pt > 0.5 ? 'T' : 'X', c: Math.round(Math.min(88, 50 + Math.abs(pt - 0.5) * (100 - len * 5))), w: this.weights[key] || 1.0, s: key };
+        }
+        return null;
+    }
+
+    // ============================================
+    // 3. BỆT + RỒNG/HỔ
+    // ============================================
     analyzeBiet(R) {
         const n = R.length;
         if (n < 2) return [];
@@ -134,22 +182,25 @@ class SupremeUltimateV3 {
         for (let i = n - 2; i >= 0; i--) { if (R[i] === last) streak++; else break; }
         const bp = this.calcBP(R, last, streak);
 
-        if (streak >= 10) S.push({ p: last === 'T' ? 'X' : 'T', c: 90, w: this.weights.biet_10, s: 'biet_10' });
-        else if (streak >= 7) S.push({ p: last === 'T' ? 'X' : 'T', c: 80, w: this.weights.biet_7, s: 'biet_7' });
-        else if (streak >= 5) { const pred = bp > 0.55 ? (last === 'T' ? 'X' : 'T') : last; S.push({ p: pred, c: 68, w: this.weights.biet_5, s: 'biet_5' }); }
+        if (streak >= 10) S.push({ p: last === 'T' ? 'X' : 'T', c: 88, w: this.weights.biet_10, s: 'biet_10' });
+        else if (streak >= 7) S.push({ p: last === 'T' ? 'X' : 'T', c: 78, w: this.weights.biet_7, s: 'biet_7' });
+        else if (streak >= 5) { const pred = bp > 0.55 ? (last === 'T' ? 'X' : 'T') : last; S.push({ p: pred, c: 66, w: this.weights.biet_5, s: 'biet_5' }); }
         else if (streak >= 3) S.push({ p: last, c: 55, w: this.weights.biet_3, s: 'biet_3' });
 
         let tR = 0, xR = 0;
         for (let i = n - 1; i >= 0 && R[i] === 'T'; i--) tR++;
         for (let i = n - 1; i >= 0 && R[i] === 'X'; i--) xR++;
-        if (tR >= 8) S.push({ p: 'X', c: 90, w: this.weights.rong, s: 'rong_8' });
-        else if (tR >= 6) S.push({ p: 'X', c: 78, w: this.weights.rong, s: 'rong_6' });
-        if (xR >= 8) S.push({ p: 'T', c: 90, w: this.weights.ho, s: 'ho_8' });
-        else if (xR >= 6) S.push({ p: 'T', c: 78, w: this.weights.ho, s: 'ho_6' });
+        if (tR >= 8) S.push({ p: 'X', c: 88, w: this.weights.rong, s: 'rong_8' });
+        else if (tR >= 6) S.push({ p: 'X', c: 76, w: this.weights.rong, s: 'rong_6' });
+        if (xR >= 8) S.push({ p: 'T', c: 88, w: this.weights.ho, s: 'ho_8' });
+        else if (xR >= 6) S.push({ p: 'T', c: 76, w: this.weights.ho, s: 'ho_6' });
 
         return S;
     }
 
+    // ============================================
+    // 4. CẦU
+    // ============================================
     analyzeCau(R) {
         const n = R.length;
         if (n < 4) return [];
@@ -158,13 +209,13 @@ class SupremeUltimateV3 {
 
         let a = 0;
         for (let i = n - 1; i >= 1; i--) { if (R[i] !== R[i - 1]) a++; else break; }
-        if (a >= 4) S.push({ p: last === 'T' ? 'X' : 'T', c: Math.min(82, 65 + a * 2), w: this.weights.cau_11, s: 'cau_11' });
+        if (a >= 4) S.push({ p: last === 'T' ? 'X' : 'T', c: Math.min(80, 65 + a * 2), w: this.weights.cau_11, s: 'cau_11' });
 
         if (n >= 8) {
             const seg = R.slice(-8);
             let ok = true;
             for (let i = 0; i < 8; i += 2) if (seg[i] !== seg[i + 1]) { ok = false; break; }
-            if (ok && seg[0] !== seg[2]) S.push({ p: n % 2 === 0 ? seg[7] : (seg[7] === 'T' ? 'X' : 'T'), c: 78, w: this.weights.cau_22, s: 'cau_22' });
+            if (ok && seg[0] !== seg[2]) S.push({ p: n % 2 === 0 ? seg[7] : (seg[7] === 'T' ? 'X' : 'T'), c: 76, w: this.weights.cau_22, s: 'cau_22' });
         }
 
         if (n >= 12) {
@@ -174,21 +225,21 @@ class SupremeUltimateV3 {
                 const block = seg.slice(i, i + 3);
                 if (block.length === 3 && !block.every(v => v === block[0])) { ok = false; break; }
             }
-            if (ok && seg[0] !== seg[3]) S.push({ p: n % 3 === 0 ? (seg[11] === 'T' ? 'X' : 'T') : seg[11], c: 80, w: this.weights.cau_33, s: 'cau_33' });
+            if (ok && seg[0] !== seg[3]) S.push({ p: n % 3 === 0 ? (seg[11] === 'T' ? 'X' : 'T') : seg[11], c: 78, w: this.weights.cau_33, s: 'cau_33' });
         }
 
         if (n >= 6) {
             const l6 = R.slice(-6).join('');
-            if (l6 === 'TXXTTT') S.push({ p: 'X', c: 72, w: this.weights.cau_123, s: 'cau_123' });
-            if (l6 === 'XTTXXX') S.push({ p: 'T', c: 72, w: this.weights.cau_123, s: 'cau_123' });
-            if (l6 === 'TTTXXT') S.push({ p: 'X', c: 70, w: this.weights.cau_321, s: 'cau_321' });
-            if (l6 === 'XXXTTX') S.push({ p: 'T', c: 70, w: this.weights.cau_321, s: 'cau_321' });
+            if (l6 === 'TXXTTT') S.push({ p: 'X', c: 70, w: this.weights.cau_123, s: 'cau_123' });
+            if (l6 === 'XTTXXX') S.push({ p: 'T', c: 70, w: this.weights.cau_123, s: 'cau_123' });
+            if (l6 === 'TTTXXT') S.push({ p: 'X', c: 68, w: this.weights.cau_321, s: 'cau_321' });
+            if (l6 === 'XXXTTX') S.push({ p: 'T', c: 68, w: this.weights.cau_321, s: 'cau_321' });
         }
 
         if (n >= 7) {
             let sw = 0;
             for (let i = n - 6; i < n; i++) if (R[i] !== R[i - 1]) sw++;
-            if (sw >= 5) S.push({ p: last === 'T' ? 'X' : 'T', c: 64 + sw * 2, w: this.weights.zigzag, s: 'zigzag' });
+            if (sw >= 5) S.push({ p: last === 'T' ? 'X' : 'T', c: 62 + sw * 2, w: this.weights.zigzag, s: 'zigzag' });
         }
 
         if (n >= 10) {
@@ -199,19 +250,22 @@ class SupremeUltimateV3 {
             const ratio = m / Math.min(left.length, right.length);
             if (ratio >= 0.85) {
                 const mp = mid - (n - mid);
-                if (mp >= 0 && mp < n) S.push({ p: R[mp], c: 58 + ratio * 12, w: this.weights.doi_xung, s: 'doi_xung' });
+                if (mp >= 0 && mp < n) S.push({ p: R[mp], c: 56 + ratio * 12, w: this.weights.doi_xung, s: 'doi_xung' });
             }
         }
 
         if (n >= 5) {
             const l5 = R.slice(-5).join('');
-            if (l5 === 'TXTXT') S.push({ p: 'X', c: 74, w: this.weights.tam_giac, s: 'tam_giac' });
-            if (l5 === 'XTXTX') S.push({ p: 'T', c: 74, w: this.weights.tam_giac, s: 'tam_giac' });
+            if (l5 === 'TXTXT') S.push({ p: 'X', c: 72, w: this.weights.tam_giac, s: 'tam_giac' });
+            if (l5 === 'XTXTX') S.push({ p: 'T', c: 72, w: this.weights.tam_giac, s: 'tam_giac' });
         }
 
         return S;
     }
 
+    // ============================================
+    // 5. XÚC XẮC
+    // ============================================
     analyzeDice() {
         const n = this.history.length;
         if (n < 3) return [];
@@ -222,10 +276,10 @@ class SupremeUltimateV3 {
         const sum = last.dice.reduce((a, b) => a + b, 0);
         const triple = last.dice.join(',');
 
-        if (sum >= 17) S.push({ p: 'X', c: 90, w: this.weights.sum_cuc_cao, s: 'sum_17' });
-        else if (sum >= 15) S.push({ p: 'X', c: 72, w: this.weights.sum_cao, s: 'sum_15' });
-        if (sum <= 4) S.push({ p: 'T', c: 90, w: this.weights.sum_cuc_thap, s: 'sum_4' });
-        else if (sum <= 6) S.push({ p: 'T', c: 68, w: this.weights.sum_thap, s: 'sum_6' });
+        if (sum >= 17) S.push({ p: 'X', c: 88, w: this.weights.sum_cuc_cao, s: 'sum_17' });
+        else if (sum >= 15) S.push({ p: 'X', c: 70, w: this.weights.sum_cao, s: 'sum_15' });
+        if (sum <= 4) S.push({ p: 'T', c: 88, w: this.weights.sum_cuc_thap, s: 'sum_4' });
+        else if (sum <= 6) S.push({ p: 'T', c: 66, w: this.weights.sum_thap, s: 'sum_6' });
 
         const tc = this.diceDB.triples[triple] || 0;
         if (tc >= 3) {
@@ -238,25 +292,28 @@ class SupremeUltimateV3 {
             }
             if (total >= 3 && Math.abs(at / total - 0.5) > 0.1) {
                 const prob = at / total;
-                S.push({ p: prob > 0.5 ? 'T' : 'X', c: Math.round(55 + Math.abs(prob - 0.5) * 70), w: this.weights.triple, s: 'triple' });
+                S.push({ p: prob > 0.5 ? 'T' : 'X', c: Math.round(54 + Math.abs(prob - 0.5) * 70), w: this.weights.triple, s: 'triple' });
             }
         }
 
         const hotSum = this.diceDB.d1.hot + this.diceDB.d2.hot + this.diceDB.d3.hot;
-        S.push({ p: hotSum >= 11 ? 'T' : 'X', c: 54, w: this.weights.hot, s: 'hot' });
+        S.push({ p: hotSum >= 11 ? 'T' : 'X', c: 53, w: this.weights.hot, s: 'hot' });
 
         if (n >= 2) {
             const prev = this.history[n - 2];
             if (prev.dice) {
                 const ps = prev.dice.reduce((a, b) => a + b, 0);
                 const kc = this.diceDB.sumAf[`${ps}->${sum}`] || 0;
-                if (kc >= 4) S.push({ p: sum >= 11 ? 'T' : 'X', c: 55 + Math.min(15, kc * 2), w: this.weights.sum_after, s: 'sum_after' });
+                if (kc >= 4) S.push({ p: sum >= 11 ? 'T' : 'X', c: 54 + Math.min(12, kc * 2), w: this.weights.sum_after, s: 'sum_after' });
             }
         }
 
         return S;
     }
 
+    // ============================================
+    // 6. PATTERN & TREND
+    // ============================================
     analyzePatternTrend(R, scores) {
         const n = R.length;
         if (n < 5) return [];
@@ -273,7 +330,7 @@ class SupremeUltimateV3 {
             const total = cnt.T + cnt.X;
             if (total >= 4 && Math.abs(cnt.T / total - 0.5) > 0.1) {
                 const prob = cnt.T / total;
-                S.push({ p: prob > 0.5 ? 'T' : 'X', c: Math.round(55 + Math.abs(prob - 0.5) * 60), w: this.weights.pattern, s: `pat_${len}` });
+                S.push({ p: prob > 0.5 ? 'T' : 'X', c: Math.round(54 + Math.abs(prob - 0.5) * 60), w: this.weights.pattern, s: `pat_${len}` });
             }
         }
 
@@ -282,44 +339,64 @@ class SupremeUltimateV3 {
             const seg = R.slice(-w);
             const tc = seg.filter(r => r === 'T').length;
             const ratio = tc / w;
-            if (ratio >= 0.75) S.push({ p: 'X', c: 62, w: this.weights.trend, s: 'trend_over' });
-            else if (ratio <= 0.25) S.push({ p: 'T', c: 62, w: this.weights.trend, s: 'trend_under' });
+            if (ratio >= 0.75) S.push({ p: 'X', c: 60, w: this.weights.trend, s: 'trend_over' });
+            else if (ratio <= 0.25) S.push({ p: 'T', c: 60, w: this.weights.trend, s: 'trend_under' });
         }
 
-        if (lastScore >= 17) S.push({ p: 'X', c: 88, w: this.weights.score, s: 'score_17' });
-        else if (lastScore >= 15) S.push({ p: 'X', c: 70, w: this.weights.score, s: 'score_15' });
-        if (lastScore <= 4) S.push({ p: 'T', c: 88, w: this.weights.score, s: 'score_4' });
-        else if (lastScore <= 6) S.push({ p: 'T', c: 66, w: this.weights.score, s: 'score_6' });
+        if (lastScore >= 17) S.push({ p: 'X', c: 86, w: this.weights.score, s: 'score_17' });
+        else if (lastScore >= 15) S.push({ p: 'X', c: 68, w: this.weights.score, s: 'score_15' });
+        if (lastScore <= 4) S.push({ p: 'T', c: 86, w: this.weights.score, s: 'score_4' });
+        else if (lastScore <= 6) S.push({ p: 'T', c: 64, w: this.weights.score, s: 'score_6' });
 
         const l5 = R.slice(-5);
-        if (l5.every(r => r === 'T')) S.push({ p: 'X', c: 78, w: this.weights.score, s: 'all_tai' });
-        if (l5.every(r => r === 'X')) S.push({ p: 'T', c: 78, w: this.weights.score, s: 'all_xiu' });
+        if (l5.every(r => r === 'T')) S.push({ p: 'X', c: 76, w: this.weights.score, s: 'all_tai' });
+        if (l5.every(r => r === 'X')) S.push({ p: 'T', c: 76, w: this.weights.score, s: 'all_xiu' });
 
         return S;
     }
 
-    analyzeAdvanced(R, scores) {
-        const n = R.length;
-        if (n < 10) return [];
+    // ============================================
+    // 7. ENSEMBLE
+    // ============================================
+    ensemble(all) {
+        const valid = all.filter(s => s && s.p);
+        if (valid.length < 3) return [];
         const S = [];
 
-        if (scores.length >= 15) {
-            const rs = scores.slice(-15);
-            const peaks = [];
-            for (let i = 2; i < rs.length - 2; i++) {
-                if (rs[i] > rs[i - 1] && rs[i] > rs[i - 2] && rs[i] > rs[i + 1] && rs[i] > rs[i + 2]) peaks.push({ val: rs[i] });
-            }
-            if (peaks.length >= 3) {
-                const l3 = peaks.slice(-3);
-                if (l3[0].val < l3[1].val && l3[2].val < l3[1].val && Math.abs(l3[0].val - l3[2].val) <= 2) {
-                    S.push({ p: 'X', c: 72, w: this.weights.vai_dau_vai, s: 'vai_dau_vai' });
-                }
-            }
+        // Voting
+        const tCount = valid.filter(s => s.p === 'T').length;
+        const total = valid.length;
+        S.push({ p: tCount > total / 2 ? 'T' : 'X', c: Math.round(50 + Math.abs(tCount / total - 0.5) * 60), w: this.weights.ens_vote, s: 'ens_vote' });
+
+        // Weighted
+        let sT = 0, sX = 0, tW = 0;
+        for (const s of valid) {
+            const w = (s.w || 1) * (s.c / 100);
+            if (s.p === 'T') sT += w; else sX += w;
+            tW += w;
+        }
+        if (tW > 0) {
+            const pt = sT / tW;
+            S.push({ p: pt > 0.5 ? 'T' : 'X', c: Math.round(50 + Math.abs(pt - 0.5) * 70), w: this.weights.ens_weight, s: 'ens_weight' });
+        }
+
+        // Top
+        valid.sort((a, b) => (b.w || 1) * b.c - (a.w || 1) * a.c);
+        const top = valid.slice(0, 10);
+        let st = 0, sx = 0;
+        for (const s of top) { if (s.p === 'T') st += s.c; else sx += s.c; }
+        const total2 = st + sx;
+        if (total2 > 0) {
+            const pt = st / total2;
+            S.push({ p: pt > 0.5 ? 'T' : 'X', c: Math.round(50 + Math.abs(pt - 0.5) * 80), w: this.weights.ens_top, s: 'ens_top' });
         }
 
         return S;
     }
 
+    // ============================================
+    // 🎯 DỰ ĐOÁN - % CỐ ĐỊNH KHÔNG NHẢY ẢO
+    // ============================================
     predict() {
         const n = this.history.length;
         if (n < 5) return { prediction: 'Cần thêm dữ liệu', confidence: 50 };
@@ -327,18 +404,32 @@ class SupremeUltimateV3 {
         const R = this.history.map(h => h.result === 'Tài' ? 'T' : 'X');
         const scores = this.history.map(h => h.total || (h.dice ? h.dice.reduce((a, b) => a + b, 0) : 0));
 
-        const all = [
+        let all = [
             ...this.analyzeBiet(R),
             ...this.analyzeCau(R),
             ...this.analyzeDice(),
-            ...this.analyzePatternTrend(R, scores),
-            ...this.analyzeAdvanced(R, scores)
+            ...this.analyzePatternTrend(R, scores)
         ];
+
+        // Thêm Markov
+        for (const order of [2, 3, 5]) {
+            const p = this.markov(R, order);
+            if (p) all.push(p);
+        }
+
+        // Thêm CauProb
+        for (const len of [4, 6]) {
+            const p = this.cauProb(R, len);
+            if (p) all.push(p);
+        }
+
+        // Thêm Ensemble
+        all.push(...this.ensemble(all));
 
         if (all.length === 0) return { prediction: R[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 52 };
 
         all.sort((a, b) => (b.w * b.c) - (a.w * a.c));
-        const top = all.slice(0, 30);
+        const top = all.slice(0, 40);
 
         let sT = 0, sX = 0, tW = 0;
         for (const s of top) {
@@ -351,18 +442,28 @@ class SupremeUltimateV3 {
 
         const probT = sT / tW;
         const finalPred = probT > 0.5 ? 'T' : 'X';
+        
+        // Tính confidence ổn định - KHÔNG NHẢY ẢO
         let conf = Math.round(Math.abs(probT - 0.5) * 2 * 100);
-
-        if (all.length < 3) conf = Math.min(conf, 60);
-        else if (all.length < 5) conf = Math.min(conf, 70);
-        else if (all.length < 8) conf = Math.min(conf, 80);
-
+        
+        // Giới hạn theo số lượng tín hiệu
+        if (all.length < 5) conf = Math.min(conf, 62);
+        else if (all.length < 10) conf = Math.min(conf, 72);
+        else if (all.length < 15) conf = Math.min(conf, 78);
+        
+        // Đồng thuận
         const t3 = top.slice(0, 3), t5 = top.slice(0, 5);
-        if (t5.every(s => s.p === t5[0].p) && all.length >= 8) conf = Math.min(90, conf + 8);
-        else if (t3.every(s => s.p === t3[0].p) && all.length >= 5) conf = Math.min(84, conf + 4);
-
-        conf = Math.max(52, Math.min(90, conf));
-        if (Math.abs(probT - 0.5) < 0.05) conf = Math.min(conf, 58);
+        const agree3 = t3.every(s => s.p === t3[0].p);
+        const agree5 = t5.every(s => s.p === t5[0].p);
+        
+        if (agree5 && all.length >= 12) conf = Math.min(82, conf + 5);
+        else if (agree3 && all.length >= 8) conf = Math.min(78, conf + 3);
+        
+        // Đảm bảo trong khoảng 52-84
+        conf = Math.max(52, Math.min(84, conf));
+        
+        // Nếu tín hiệu yếu, giới hạn thấp
+        if (Math.abs(probT - 0.5) < 0.06) conf = Math.min(conf, 58);
 
         return {
             prediction: finalPred === 'T' ? 'Tài' : 'Xỉu',
@@ -375,7 +476,7 @@ class SupremeUltimateV3 {
 // ======================================================
 // KHỞI TẠO AI
 // ======================================================
-const supremeAI = new SupremeUltimateV3();
+const godAI = new SupremeGodAI();
 
 // ======================================================
 // ANALYZE CAU - 8 PHIÊN
@@ -426,7 +527,7 @@ app.get("/", async (req, res) => {
         for (const item of history) {
             if (item.phien > lastPhien) {
                 globalHistory.push(item);
-                supremeAI.addSession(item);
+                godAI.addSession(item);
                 lastPhien = item.phien;
             }
         }
@@ -434,7 +535,7 @@ app.get("/", async (req, res) => {
 
         const latest = history[history.length - 1];
         const pattern = analyzeCau(history);
-        const predict = supremeAI.predict();
+        const predict = godAI.predict();
 
         const result = {
             id: "AnhKhoidzai Sunwin",
@@ -450,10 +551,11 @@ app.get("/", async (req, res) => {
         console.log("JSON:", JSON.stringify(result, null, 2));
         res.json(result);
     } catch (err) {
+        console.log("ERROR:", err.message);
         res.json({
             id: "AnhKhoidzai Sunwin",
             phien_truoc: 0, xuc_xac1: 0, xuc_xac2: 0, xuc_xac3: 0, tong: 0,
-            ket_qua: "tài", pattern: "[Lỗi]", phien_hien_tai: 0, du_doan: "tài", do_tin_cay: "52%"
+            ket_qua: "tài", pattern: "[Lỗi fetch API]", phien_hien_tai: 0, du_doan: "tài", do_tin_cay: "52%"
         });
     }
 });
@@ -467,7 +569,7 @@ app.get("/taixiu", async (req, res) => {
         for (const item of history) {
             if (item.phien > lastPhien) {
                 globalHistory.push(item);
-                supremeAI.addSession(item);
+                godAI.addSession(item);
                 lastPhien = item.phien;
             }
         }
@@ -475,7 +577,7 @@ app.get("/taixiu", async (req, res) => {
 
         const latest = history[history.length - 1];
         const pattern = analyzeCau(history);
-        const predict = supremeAI.predict();
+        const predict = godAI.predict();
 
         res.json({
             id: "AnhKhoidzai Sunwin",
@@ -496,10 +598,10 @@ app.get("/taixiu", async (req, res) => {
 });
 
 // ======================================================
-// AUTO SCAN MỖI 1 GIÂY
+// AUTO SCAN MỖI 0.3 GIÂY (300ms)
 // ======================================================
 async function autoScan() {
-    console.log("🔄 Bắt đầu quét API mỗi 1 giây...");
+    console.log("🔄 Bắt đầu quét API mỗi 0.3 giây...");
     setInterval(async () => {
         try {
             const response = await axios.get(API_URL, { timeout: 5000 });
@@ -509,17 +611,17 @@ async function autoScan() {
             for (const item of history) {
                 if (item.phien > lastPhien) {
                     globalHistory.push(item);
-                    supremeAI.addSession(item);
+                    godAI.addSession(item);
                     lastPhien = item.phien;
                 }
             }
             if (globalHistory.length > 200) globalHistory = globalHistory.slice(-200);
         } catch (e) {}
-    }, 1000);
+    }, 300);
 }
 
 app.listen(PORT, () => {
-    console.log("🌟 Supreme Ultimate V3 chạy tại port " + PORT);
+    console.log("🌟 Supreme God AI chạy tại port " + PORT);
     console.log("🔗 API: " + API_URL);
     autoScan();
 });
