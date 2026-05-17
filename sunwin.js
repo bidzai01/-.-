@@ -10,7 +10,7 @@ const API_URL = "https://apivip-anhkhoi-dzaivcl.onrender.com/data";
 // ======================================================
 // FILE LƯU TRỮ
 // ======================================================
-const STATS_FILE = path.join(__dirname, "master_stats.json");
+const STATS_FILE = path.join(__dirname, "supreme_stats.json");
 
 function saveStats(stats) {
     try { fs.writeFileSync(STATS_FILE, JSON.stringify(stats, null, 2)); } catch (e) {}
@@ -63,67 +63,67 @@ function normalizeData(rawData) {
 }
 
 // ======================================================
-// 🎯 MASTER ALGORITHM - CỰC CHUẨN
+// 🌟 SUPREME ALGORITHM V9
 // ======================================================
-class MasterAlgorithm {
+class SupremeAlgorithm {
     constructor() {
         this.history = [];
         this.predictions = [];
-        this.stats = { correct: 0, total: 0, win: 0, maxWin: 0, lose: 0 };
-        
-        // DICE DATABASE
-        this.diceDB = {
-            d1: { freq: {}, trans: {}, hot: 3, cold: 3, streak: {} },
-            d2: { freq: {}, trans: {}, hot: 3, cold: 3, streak: {} },
-            d3: { freq: {}, trans: {}, hot: 3, cold: 3, streak: {} },
-            triples: {},
-            pairs: {},
-            sumAfter: {},
-            sumMomentum: []
+        this.stats = { ok: 0, all: 0, win: 0, maxW: 0, lose: 0, fetch: 0 };
+
+        // Bộ nhớ cầu
+        this.cauDB = {
+            biet: {}, c11: {}, c22: {}, c33: {}, c44: {}, c123: {}, c321: {},
+            c1212: {}, c1122: {}, zigzag: {}, doiXung: {}, tamGiac: {},
+            rong: {}, ho: {}, nem: {}, co: {}, vaiDauVai: {}, haiDinh: {}, haiDay: {}
         };
-        
-        // PATTERN MEMORY
-        this.patternMemory = {};
-        this.successPatterns = {};
-        this.failPatterns = {};
+
+        // Bộ nhớ xúc xắc 3 viên
+        this.diceDB = {
+            d1: { freq: {}, trans: {}, streak: {}, hot: 3, cold: 3 },
+            d2: { freq: {}, trans: {}, streak: {}, hot: 3, cold: 3 },
+            d3: { freq: {}, trans: {}, streak: {}, hot: 3, cold: 3 },
+            triples: {}, pairs: {}, sumAf: {}, sumMom: [],
+            hl: {}, oe: {}, dev: {}
+        };
+
+        // Bộ nhớ pattern
+        this.mem = { patterns: {}, success: {}, fail: {} };
     }
 
-    normResult(r) {
+    norm(r) {
         if (!r) return null;
         r = r.charAt(0).toUpperCase() + r.slice(1).toLowerCase();
-        if (['T', 'Tai', 'Tài'].includes(r)) return 'T';
-        if (['X', 'Xiu', 'Xỉu'].includes(r)) return 'X';
-        return null;
+        return ['T', 'Tai', 'Tài'].includes(r) ? 'T' : ['X', 'Xiu', 'Xỉu'].includes(r) ? 'X' : null;
     }
 
     updateDice(d1, d2, d3) {
-        const dice = [d1, d2, d3];
-        const names = ['d1', 'd2', 'd3'];
+        const arr = [d1, d2, d3];
+        const keys = ['d1', 'd2', 'd3'];
 
         for (let i = 0; i < 3; i++) {
-            const obj = this.diceDB[names[i]];
-            const f = dice[i];
-            obj.freq[f] = (obj.freq[f] || 0) + 1;
+            const o = this.diceDB[keys[i]];
+            const f = arr[i];
+            o.freq[f] = (o.freq[f] || 0) + 1;
 
             if (this.history.length > 0) {
                 const prev = this.history[this.history.length - 1];
                 if (prev.dice) {
                     const pf = prev.dice[i];
-                    const key = `${pf}->${f}`;
-                    obj.trans[key] = (obj.trans[key] || 0) + 1;
-                    if (pf === f) obj.streak[f] = (obj.streak[f] || 0) + 1;
-                    else obj.streak[f] = 0;
+                    const k = `${pf}->${f}`;
+                    o.trans[k] = (o.trans[k] || 0) + 1;
+                    o.streak[f] = pf === f ? (o.streak[f] || 0) + 1 : 0;
                 }
             }
         }
 
-        for (const n of names) {
-            const obj = this.diceDB[n];
-            const entries = Object.entries(obj.freq);
-            if (entries.length > 0) {
-                entries.sort((a, b) => b[1] - a[1]);
-                obj.hot = parseInt(entries[0][0]);
-                obj.cold = parseInt(entries[entries.length - 1][0]);
+        for (const k of keys) {
+            const o = this.diceDB[k];
+            const e = Object.entries(o.freq).filter(([x]) => x !== '0');
+            if (e.length > 0) {
+                e.sort((a, b) => b[1] - a[1]);
+                o.hot = +e[0][0];
+                o.cold = +e[e.length - 1][0];
             }
         }
 
@@ -131,122 +131,149 @@ class MasterAlgorithm {
         this.diceDB.triples[triple] = (this.diceDB.triples[triple] || 0) + 1;
 
         const sum = d1 + d2 + d3;
-        this.diceDB.sumMomentum.push(sum);
-        if (this.diceDB.sumMomentum.length > 50) this.diceDB.sumMomentum.shift();
+        this.diceDB.sumMom.push(sum);
+        if (this.diceDB.sumMom.length > 50) this.diceDB.sumMom.shift();
 
         if (this.history.length > 0) {
             const prev = this.history[this.history.length - 1];
             if (prev.dice) {
                 const ps = prev.dice.reduce((a, b) => a + b, 0);
-                const key = `${ps}->${sum}`;
-                this.diceDB.sumAfter[key] = (this.diceDB.sumAfter[key] || 0) + 1;
+                const k = `${ps}->${sum}`;
+                this.diceDB.sumAf[k] = (this.diceDB.sumAf[k] || 0) + 1;
             }
         }
 
         const pairs = [`${d1},${d2}`, `${d2},${d3}`, `${d1},${d3}`];
         for (const p of pairs) this.diceDB.pairs[p] = (this.diceDB.pairs[p] || 0) + 1;
+
+        const hl = arr.map(d => d >= 4 ? 'H' : 'L').join('');
+        this.diceDB.hl[hl] = (this.diceDB.hl[hl] || 0) + 1;
+
+        const oe = arr.map(d => d % 2 === 0 ? 'C' : 'L').join('');
+        this.diceDB.oe[oe] = (this.diceDB.oe[oe] || 0) + 1;
+
+        const dev = Math.max(...arr) - Math.min(...arr);
+        this.diceDB.dev[dev] = (this.diceDB.dev[dev] || 0) + 1;
     }
 
-    updatePatternMemory() {
-        const results = this.history.map(h => h.result === 'Tài' ? 'T' : 'X');
-        const n = results.length;
+    updateCau() {
+        const R = this.history.map(h => h.result === 'Tài' ? 'T' : 'X');
+        const n = R.length;
+        if (n < 3) return;
+        const last = R[n - 1];
+
+        let s = 1;
+        for (let i = n - 2; i >= 0; i--) { if (R[i] === last) s++; else break; }
+        if (s >= 3) this.cauDB.biet[`${last}_${s}`] = (this.cauDB.biet[`${last}_${s}`] || 0) + 1;
+
+        let a = 0;
+        for (let i = n - 1; i >= 1; i--) { if (R[i] !== R[i - 1]) a++; else break; }
+        if (a >= 3) this.cauDB.c11[a + 1] = (this.cauDB.c11[a + 1] || 0) + 1;
+
+        let tR = 0, xR = 0;
+        for (let i = n - 1; i >= 0 && R[i] === 'T'; i--) tR++;
+        for (let i = n - 1; i >= 0 && R[i] === 'X'; i--) xR++;
+        if (tR >= 4) this.cauDB.rong[tR] = (this.cauDB.rong[tR] || 0) + 1;
+        if (xR >= 4) this.cauDB.ho[xR] = (this.cauDB.ho[xR] || 0) + 1;
+    }
+
+    updateMemory() {
+        const R = this.history.map(h => h.result === 'Tài' ? 'T' : 'X');
+        const n = R.length;
         if (n < 4) return;
 
-        for (const len of [3, 4, 5]) {
+        for (const len of [3, 4, 5, 6, 7, 8]) {
             if (n <= len) continue;
-            const pattern = results.slice(-len).join('');
-            const key = `p${len}_${pattern}`;
-            this.patternMemory[key] = (this.patternMemory[key] || 0) + 1;
+            const pat = R.slice(-len).join('');
+            const key = `p${len}_${pat}`;
+            this.mem.patterns[key] = (this.mem.patterns[key] || 0) + 1;
         }
 
         if (this.predictions.length > 0) {
-            const lastPred = this.predictions[this.predictions.length - 1];
-            if (lastPred.actual) {
-                const pattern = results.slice(-4).join('');
-                if (lastPred.correct) {
-                    this.successPatterns[pattern] = (this.successPatterns[pattern] || 0) + 1;
-                } else {
-                    this.failPatterns[pattern] = (this.failPatterns[pattern] || 0) + 1;
-                }
+            const lp = this.predictions[this.predictions.length - 1];
+            if (lp.actual) {
+                const pat = R.slice(-4).join('');
+                if (lp.correct) this.mem.success[pat] = (this.mem.success[pat] || 0) + 1;
+                else this.mem.fail[pat] = (this.mem.fail[pat] || 0) + 1;
             }
         }
     }
 
-    extractStreaks(results) {
-        const streaks = [];
-        let cur = 1, ct = results[0];
-        for (let i = 1; i < results.length; i++) {
-            if (results[i] === ct) cur++;
-            else { if (cur >= 3) streaks.push({ type: ct, len: cur }); ct = results[i]; cur = 1; }
-        }
-        if (cur >= 3) streaks.push({ type: ct, len: cur });
-        return streaks;
+    addSession(sessionData) {
+        const id = sessionData.phien || sessionData.session || sessionData.id || Date.now();
+        if (this.history.length > 0 && this.history[this.history.length - 1].phien === id) return;
+
+        const res = this.norm(sessionData.ket_qua || sessionData.result || '');
+        if (!res) return;
+
+        const d1 = sessionData.x1 || sessionData.xuc_xac_1 || 0;
+        const d2 = sessionData.x2 || sessionData.xuc_xac_2 || 0;
+        const d3 = sessionData.x3 || sessionData.xuc_xac_3 || 0;
+        const total = sessionData.tong || (d1 + d2 + d3);
+
+        this.updateDice(d1, d2, d3);
+
+        this.history.push({
+            phien: id,
+            result: res === 'T' ? 'Tài' : 'Xỉu',
+            total,
+            dice: [d1, d2, d3],
+            ts: Date.now()
+        });
+        if (this.history.length > 3000) this.history.splice(0, 500);
+
+        this.updateCau();
+        this.updateMemory();
+        this.stats.fetch++;
     }
 
-    calcBreakProb(results, result, streak) {
-        const allStreaks = this.extractStreaks(results);
-        const sameType = allStreaks.filter(s => s.type === result);
-        if (sameType.length === 0) return streak > 8 ? 0.7 : 0.5;
-        const exactMatch = sameType.filter(s => s.len === streak).length;
-        const longerMatch = sameType.filter(s => s.len > streak).length;
-        const total = exactMatch + longerMatch;
-        if (total === 0) return streak > 8 ? 0.7 : 0.5;
-        return Math.min(0.9, Math.max(0.1, exactMatch / total + streak * 0.02));
-    }
-
-    analyzeBiet(results) {
-        const n = results.length;
+    analyzeBiet(R) {
+        const n = R.length;
         if (n < 2) return [];
         const S = [];
-        const last = results[n - 1];
+        const last = R[n - 1];
 
         let streak = 1;
-        for (let i = n - 2; i >= 0; i--) { if (results[i] === last) streak++; else break; }
+        for (let i = n - 2; i >= 0; i--) { if (R[i] === last) streak++; else break; }
 
-        const bp = this.calcBreakProb(results, last, streak);
+        if (streak >= 10) S.push({ p: last === 'T' ? 'X' : 'T', c: 97, w: 3.0, s: 'biet_10', r: `Bệt ${streak}` });
+        else if (streak >= 8) S.push({ p: last === 'T' ? 'X' : 'T', c: 92, w: 2.8, s: 'biet_8', r: `Bệt ${streak}` });
+        else if (streak >= 6) S.push({ p: last === 'T' ? 'X' : 'T', c: 84, w: 2.3, s: 'biet_6', r: `Bệt ${streak}` });
+        else if (streak >= 4) S.push({ p: last === 'T' ? 'X' : 'T', c: 68 + streak * 2, w: 1.8, s: 'biet_4', r: `Bệt ${streak}` });
+        else if (streak >= 3) S.push({ p: last, c: 58 + streak * 2, w: 1.3, s: 'biet_3', r: `Bệt ngắn ${streak}` });
 
-        if (streak >= 10) S.push({ p: last === 'T' ? 'X' : 'T', c: 97, w: 3.0, s: 'biet_10', r: `Bệt siêu dài ${streak}` });
-        else if (streak >= 8) S.push({ p: last === 'T' ? 'X' : 'T', c: 92, w: 2.8, s: 'biet_8', r: `Bệt rất dài ${streak}` });
-        else if (streak >= 6) S.push({ p: last === 'T' ? 'X' : 'T', c: 84, w: 2.3, s: 'biet_6', r: `Bệt dài ${streak}` });
-        else if (streak >= 4) {
-            const pred = bp > 0.55 ? (last === 'T' ? 'X' : 'T') : last;
-            S.push({ p: pred, c: 65 + streak * 3, w: 1.8, s: 'biet_4', r: `Bệt ${streak}` });
-        } else if (streak >= 3) S.push({ p: last, c: 58 + streak * 2, w: 1.3, s: 'biet_3', r: `Bệt ngắn ${streak}` });
-
-        let tRun = 0, xRun = 0;
-        for (let i = n - 1; i >= 0 && results[i] === 'T'; i--) tRun++;
-        for (let i = n - 1; i >= 0 && results[i] === 'X'; i--) xRun++;
-
-        if (tRun >= 8) S.push({ p: 'X', c: 96, w: 3.0, s: 'rong_8', r: `Rồng ${tRun}` });
-        else if (tRun >= 6) S.push({ p: 'X', c: 86, w: 2.5, s: 'rong_6', r: `Rồng ${tRun}` });
-        else if (tRun >= 4) S.push({ p: 'T', c: 68, w: 1.3, s: 'rong_4', r: `Rồng ngắn ${tRun}` });
-
-        if (xRun >= 8) S.push({ p: 'T', c: 96, w: 3.0, s: 'ho_8', r: `Hổ ${xRun}` });
-        else if (xRun >= 6) S.push({ p: 'T', c: 86, w: 2.5, s: 'ho_6', r: `Hổ ${xRun}` });
-        else if (xRun >= 4) S.push({ p: 'X', c: 68, w: 1.3, s: 'ho_4', r: `Hổ ngắn ${xRun}` });
+        let tR = 0, xR = 0;
+        for (let i = n - 1; i >= 0 && R[i] === 'T'; i--) tR++;
+        for (let i = n - 1; i >= 0 && R[i] === 'X'; i--) xR++;
+        if (tR >= 8) S.push({ p: 'X', c: 96, w: 3.0, s: 'rong_8', r: `Rồng ${tR}` });
+        else if (tR >= 6) S.push({ p: 'X', c: 86, w: 2.5, s: 'rong_6', r: `Rồng ${tR}` });
+        else if (tR >= 4) S.push({ p: 'T', c: 68, w: 1.3, s: 'rong_4', r: `Rồng ngắn ${tR}` });
+        if (xR >= 8) S.push({ p: 'T', c: 96, w: 3.0, s: 'ho_8', r: `Hổ ${xR}` });
+        else if (xR >= 6) S.push({ p: 'T', c: 86, w: 2.5, s: 'ho_6', r: `Hổ ${xR}` });
+        else if (xR >= 4) S.push({ p: 'X', c: 68, w: 1.3, s: 'ho_4', r: `Hổ ngắn ${xR}` });
 
         return S;
     }
 
-    analyzeCau(results) {
-        const n = results.length;
+    analyzeCau(R) {
+        const n = R.length;
         if (n < 4) return [];
         const S = [];
-        const last = results[n - 1];
+        const last = R[n - 1];
 
-        let alt = 0;
-        for (let i = n - 1; i >= 1; i--) { if (results[i] !== results[i - 1]) alt++; else break; }
-        if (alt >= 3) S.push({ p: last === 'T' ? 'X' : 'T', c: Math.min(92, 65 + (alt + 1) * 2), w: 1.0 + alt * 0.12, s: 'cau_11', r: `1-1 (${alt + 1})` });
+        let a = 0;
+        for (let i = n - 1; i >= 1; i--) { if (R[i] !== R[i - 1]) a++; else break; }
+        if (a >= 3) S.push({ p: last === 'T' ? 'X' : 'T', c: Math.min(92, 65 + (a + 1) * 2), w: 1.0 + a * 0.12, s: 'cau_11', r: `1-1 (${a + 1})` });
 
         if (n >= 8) {
-            const seg = results.slice(-8);
+            const seg = R.slice(-8);
             let ok = true;
             for (let i = 0; i < 8; i += 2) if (seg[i] !== seg[i + 1]) { ok = false; break; }
             if (ok && seg[0] !== seg[2]) S.push({ p: n % 2 === 0 ? seg[7] : (seg[7] === 'T' ? 'X' : 'T'), c: 84, w: 1.6, s: 'cau_22', r: 'Cầu 2-2' });
         }
 
         if (n >= 12) {
-            const seg = results.slice(-12);
+            const seg = R.slice(-12);
             let ok = true;
             for (let i = 0; i < 12; i += 3) {
                 const block = seg.slice(i, i + 3);
@@ -256,7 +283,7 @@ class MasterAlgorithm {
         }
 
         if (n >= 6) {
-            const l6 = results.slice(-6).join('');
+            const l6 = R.slice(-6).join('');
             if (l6 === 'TXXTTT') S.push({ p: 'X', c: 77, w: 1.3, s: 'cau_123', r: '1-2-3' });
             if (l6 === 'XTTXXX') S.push({ p: 'T', c: 77, w: 1.3, s: 'cau_123', r: '1-2-3' });
             if (l6 === 'TTTXXT') S.push({ p: 'X', c: 76, w: 1.3, s: 'cau_321', r: '3-2-1' });
@@ -265,24 +292,24 @@ class MasterAlgorithm {
 
         if (n >= 7) {
             let sw = 0;
-            for (let i = n - 6; i < n; i++) if (results[i] !== results[i - 1]) sw++;
+            for (let i = n - 6; i < n; i++) if (R[i] !== R[i - 1]) sw++;
             if (sw >= 5) S.push({ p: last === 'T' ? 'X' : 'T', c: 68 + sw * 2, w: 1.0, s: 'zigzag', r: `Zigzag ${sw}` });
         }
 
         if (n >= 10) {
             const mid = Math.floor(n / 2);
-            const left = results.slice(0, mid), right = results.slice(mid).reverse();
+            const left = R.slice(0, mid), right = R.slice(mid).reverse();
             let m = 0;
             for (let i = 0; i < Math.min(left.length, right.length); i++) if (left[i] === right[i]) m++;
             const ratio = m / Math.min(left.length, right.length);
             if (ratio >= 0.85) {
                 const mp = mid - (n - mid);
-                if (mp >= 0 && mp < n) S.push({ p: results[mp], c: 62 + ratio * 15, w: 1.0, s: 'doi_xung', r: `Đối xứng ${(ratio*100).toFixed(0)}%` });
+                if (mp >= 0 && mp < n) S.push({ p: R[mp], c: 62 + ratio * 15, w: 1.0, s: 'doi_xung', r: `Đối xứng ${(ratio*100).toFixed(0)}%` });
             }
         }
 
         if (n >= 5) {
-            const l5 = results.slice(-5).join('');
+            const l5 = R.slice(-5).join('');
             if (l5 === 'TXTXT') S.push({ p: 'X', c: 80, w: 1.2, s: 'tam_giac', r: 'Tam giác' });
             if (l5 === 'XTXTX') S.push({ p: 'T', c: 80, w: 1.2, s: 'tam_giac', r: 'Tam giác' });
         }
@@ -317,68 +344,39 @@ class MasterAlgorithm {
             }
             if (total >= 3) {
                 const prob = at / total;
-                const pred = prob > 0.5 ? 'T' : 'X';
-                S.push({ p: pred, c: Math.round(50 + Math.abs(prob - 0.5) * 85), w: 2.2, s: 'triple', r: `Bộ ba ${triple} (${tc} lần)` });
-            }
-        }
-
-        const names = ['d1', 'd2', 'd3'];
-        const faces = [d1, d2, d3];
-        for (let i = 0; i < 3; i++) {
-            const obj = this.diceDB[names[i]];
-            const cf = faces[i];
-            let bf = cf, bc = 0;
-            for (let f = 1; f <= 6; f++) {
-                const key = `${cf}->${f}`;
-                const c = obj.trans[key] || 0;
-                if (c > bc) { bc = c; bf = f; }
-            }
-            if (bc >= 3 && bf !== cf) {
-                const ps = (i === 0 ? bf : d1) + (i === 1 ? bf : d2) + (i === 2 ? bf : d3);
-                S.push({ p: ps >= 11 ? 'T' : 'X', c: 50 + Math.min(25, bc * 5), w: 1.1, s: `dice_d${i + 1}`, r: `Viên ${i + 1}: ${cf}->${bf} (${bc})` });
+                S.push({ p: prob > 0.5 ? 'T' : 'X', c: Math.round(50 + Math.abs(prob - 0.5) * 85), w: 2.2, s: 'triple', r: `Bộ ba ${triple} (${tc} lần)` });
             }
         }
 
         const hs = this.diceDB.d1.hot + this.diceDB.d2.hot + this.diceDB.d3.hot;
-        const cs = this.diceDB.d1.cold + this.diceDB.d2.cold + this.diceDB.d3.cold;
         S.push({ p: hs >= 11 ? 'T' : 'X', c: 56, w: 0.8, s: 'hot', r: `Hot: ${this.diceDB.d1.hot}-${this.diceDB.d2.hot}-${this.diceDB.d3.hot}` });
-
-        if (n >= 2) {
-            const prev = this.history[n - 2];
-            if (prev.dice) {
-                const ps = prev.dice.reduce((a, b) => a + b, 0);
-                const key = `${ps}->${sum}`;
-                const kc = this.diceDB.sumAfter[key] || 0;
-                if (kc >= 3) S.push({ p: sum >= 11 ? 'T' : 'X', c: 55 + Math.min(20, kc * 3), w: 1.0, s: 'sum_after', r: `${ps}->${sum} (${kc})` });
-            }
-        }
 
         return S;
     }
 
-    analyzePatternTrend(results, scores) {
-        const n = results.length;
+    analyzePatternTrend(R, scores) {
+        const n = R.length;
         if (n < 5) return [];
         const S = [];
         const lastScore = scores[n - 1];
 
         for (const len of [3, 4, 5]) {
             if (n <= len) continue;
-            const pat = results.slice(-len).join('');
+            const pat = R.slice(-len).join('');
             const cnt = { T: 0, X: 0 };
             for (let i = 0; i < n - len; i++) {
-                if (results.slice(i, i + len).join('') === pat) cnt[results[i + len]]++;
+                if (R.slice(i, i + len).join('') === pat) cnt[R[i + len]]++;
             }
             const total = cnt.T + cnt.X;
-            if (total >= Math.max(3, 10 - len)) {
+            if (total >= Math.max(3, 8 - len)) {
                 const prob = cnt.T / total;
                 S.push({ p: prob > 0.5 ? 'T' : 'X', c: Math.round(Math.min(90, 50 + Math.abs(prob - 0.5) * (100 - len * 5))), w: Math.max(0.5, 1.8 - len * 0.15), s: `pat_${len}`, r: `Pattern ${len} (${total} lần)` });
             }
         }
 
-        for (const w of [5, 10, 15]) {
+        for (const w of [5, 10]) {
             if (n < w) continue;
-            const seg = results.slice(-w);
+            const seg = R.slice(-w);
             const tc = seg.filter(r => r === 'T').length;
             const ratio = tc / w;
             if (ratio >= 0.7) S.push({ p: 'X', c: 60 + ratio * 25, w: 1.0, s: `trend_over_${w}`, r: `Quá mua ${w}` });
@@ -390,21 +388,9 @@ class MasterAlgorithm {
         if (lastScore <= 4) S.push({ p: 'T', c: 95, w: 2.5, s: 'score_4', r: 'Điểm <= 4' });
         else if (lastScore <= 6) S.push({ p: 'T', c: 72, w: 1.4, s: 'score_6', r: 'Điểm <= 6' });
 
-        const l5 = results.slice(-5);
+        const l5 = R.slice(-5);
         if (l5.every(r => r === 'T')) S.push({ p: 'X', c: 84, w: 1.8, s: 'all_tai', r: '5 phiên Tài' });
         if (l5.every(r => r === 'X')) S.push({ p: 'T', c: 84, w: 1.8, s: 'all_xiu', r: '5 phiên Xỉu' });
-
-        // Pattern memory
-        if (n >= 4) {
-            const pat = results.slice(-4).join('');
-            const sCount = this.successPatterns[pat] || 0;
-            const fCount = this.failPatterns[pat] || 0;
-            const total = sCount + fCount;
-            if (total >= 3) {
-                const ratio = sCount / total;
-                if (ratio >= 0.7) S.push({ p: results[n - 1], c: 55 + ratio * 25, w: 1.1, s: 'memory_win', r: `Pattern thắng (${(ratio*100).toFixed(0)}%)` });
-            }
-        }
 
         return S;
     }
@@ -413,84 +399,49 @@ class MasterAlgorithm {
         const n = this.history.length;
         if (n < 5) return { prediction: 'Cần thêm dữ liệu', confidence: 0, wait: true };
 
-        const results = this.history.map(h => h.result === 'Tài' ? 'T' : 'X');
+        const R = this.history.map(h => h.result === 'Tài' ? 'T' : 'X');
         const scores = this.history.map(h => h.tong || (h.dice ? h.dice.reduce((a, b) => a + b, 0) : 0));
 
-        const allSignals = [
-            ...this.analyzeBiet(results),
-            ...this.analyzeCau(results),
-            ...this.analyzeDice(),
-            ...this.analyzePatternTrend(results, scores)
-        ];
+        const all = [...this.analyzeBiet(R), ...this.analyzeCau(R), ...this.analyzeDice(), ...this.analyzePatternTrend(R, scores)];
+        if (all.length === 0) return { prediction: R[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 50 };
 
-        if (allSignals.length === 0) return { prediction: results[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 50 };
-
-        allSignals.sort((a, b) => (b.w * b.c) - (a.w * a.c));
-        const topSignals = allSignals.slice(0, 50);
+        all.sort((a, b) => (b.w * b.c) - (a.w * a.c));
+        const top = all.slice(0, 50);
 
         let sT = 0, sX = 0, tW = 0;
-        for (const s of topSignals) {
+        for (const s of top) {
             const w = s.w * (s.c / 100);
             if (s.p === 'T') sT += w; else sX += w;
             tW += w;
         }
 
-        if (tW === 0) return { prediction: results[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 50 };
+        if (tW === 0) return { prediction: R[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 50 };
 
         const probT = sT / tW;
         const finalPred = probT > 0.5 ? 'T' : 'X';
-        let confidence = Math.round(Math.abs(probT - 0.5) * 2 * 100);
-        confidence = Math.max(52, Math.min(98, confidence));
+        let conf = Math.round(Math.abs(probT - 0.5) * 2 * 100);
+        conf = Math.max(52, Math.min(98, conf));
 
-        const top5 = topSignals.slice(0, 5), top10 = topSignals.slice(0, 10);
-        if (top10.every(s => s.p === top10[0].p)) confidence = Math.min(98, confidence + 12);
-        else if (top5.every(s => s.p === top5[0].p)) confidence = Math.min(98, confidence + 6);
+        const t5 = top.slice(0, 5), t10 = top.slice(0, 10);
+        if (t10.every(s => s.p === t10[0].p)) conf = Math.min(98, conf + 12);
+        else if (t5.every(s => s.p === t5[0].p)) conf = Math.min(98, conf + 6);
 
-        if (this.stats.lose >= 3) confidence = Math.max(52, confidence - 5);
-        if (this.stats.win >= 5) confidence = Math.min(98, confidence + 5);
+        if (this.stats.lose >= 3) conf = Math.max(52, conf - 5);
+        if (this.stats.win >= 5) conf = Math.min(98, conf + 5);
 
         this.predictions.push({
             prediction: finalPred === 'T' ? 'Tài' : 'Xỉu',
-            confidence,
-            topSignals: topSignals.slice(0, 5).map(s => s.s)
+            confidence: conf,
+            topSignals: top.slice(0, 5).map(s => s.s)
         });
         if (this.predictions.length > 500) this.predictions.shift();
 
         return {
             prediction: finalPred === 'T' ? 'Tài' : 'Xỉu',
-            confidence,
-            totalSignals: allSignals.length,
-            dice: {
-                hot: `${this.diceDB.d1.hot}-${this.diceDB.d2.hot}-${this.diceDB.d3.hot}`,
-                cold: `${this.diceDB.d1.cold}-${this.diceDB.d2.cold}-${this.diceDB.d3.cold}`
-            }
+            confidence: conf,
+            totalSignals: all.length,
+            dice: { hot: `${this.diceDB.d1.hot}-${this.diceDB.d2.hot}-${this.diceDB.d3.hot}`, cold: `${this.diceDB.d1.cold}-${this.diceDB.d2.cold}-${this.diceDB.d3.cold}` }
         };
-    }
-
-    addSession(sessionData) {
-        const id = sessionData.phien || sessionData.session || sessionData.id || Date.now();
-        if (this.history.length > 0 && this.history[this.history.length - 1].phien === id) return;
-
-        const res = this.normResult(sessionData.ket_qua || sessionData.result || '');
-        if (!res) return;
-
-        const d1 = sessionData.x1 || sessionData.xuc_xac_1 || 0;
-        const d2 = sessionData.x2 || sessionData.xuc_xac_2 || 0;
-        const d3 = sessionData.x3 || sessionData.xuc_xac_3 || 0;
-        const total = sessionData.tong || (d1 + d2 + d3);
-
-        this.updateDice(d1, d2, d3);
-
-        this.history.push({
-            phien: id,
-            result: res === 'T' ? 'Tài' : 'Xỉu',
-            total,
-            dice: [d1, d2, d3],
-            ts: Date.now()
-        });
-        if (this.history.length > 3000) this.history.splice(0, 500);
-
-        this.updatePatternMemory();
     }
 
     feedback(actualResult) {
@@ -498,8 +449,8 @@ class MasterAlgorithm {
         const lp = this.predictions[this.predictions.length - 1];
         lp.actual = actualResult;
         lp.correct = lp.prediction === actualResult;
-        this.stats.total++;
-        if (lp.correct) { this.stats.correct++; this.stats.win++; this.stats.lose = 0; if (this.stats.win > this.stats.maxWin) this.stats.maxWin = this.stats.win; }
+        this.stats.all++;
+        if (lp.correct) { this.stats.ok++; this.stats.win++; this.stats.lose = 0; if (this.stats.win > this.stats.maxW) this.stats.maxW = this.stats.win; }
         else { this.stats.lose++; this.stats.win = 0; }
     }
 }
@@ -507,30 +458,30 @@ class MasterAlgorithm {
 // ======================================================
 // KHỞI TẠO AI
 // ======================================================
-const masterAI = new MasterAlgorithm();
+const supremeAI = new SupremeAlgorithm();
 
 // ======================================================
-// ANALYZE CAU - 7 PHIÊN
+// ANALYZE CAU - 8 PHIÊN
 // ======================================================
 function analyzeCau(history) {
-    if (history.length < 7) return "[Đang thu thập...]";
+    if (history.length < 8) return "[Đang thu thập...]";
     const results = history.map(h => h.result === 'Tài' ? 'T' : 'X');
-    const last7 = results.slice(-7);
-    const patternStr = last7.join('');
+    const last8 = results.slice(-8);
+    const patternStr = last8.join('');
     let parts = [];
     let streak = 1;
-    const last = last7[last7.length - 1];
-    for (let i = last7.length - 2; i >= 0; i--) { if (last7[i] === last) streak++; else break; }
+    const last = last8[last8.length - 1];
+    for (let i = last8.length - 2; i >= 0; i--) { if (last8[i] === last) streak++; else break; }
     if (streak >= 3) parts.push(`Bệt ${streak} ${last === 'T' ? 'Tài' : 'Xỉu'}`);
     let is11 = true;
-    for (let i = 1; i < last7.length; i++) { if (last7[i] === last7[i - 1]) { is11 = false; break; } }
+    for (let i = 1; i < last8.length; i++) { if (last8[i] === last8[i - 1]) { is11 = false; break; } }
     if (is11) parts.push("Cầu 1-1");
-    const tCount = last7.filter(r => r === 'T').length;
+    const tCount = last8.filter(r => r === 'T').length;
     if (parts.length === 0) {
-        if (tCount >= 6) parts.push("Tài áp đảo");
+        if (tCount >= 7) parts.push("Tài áp đảo");
         else if (tCount <= 1) parts.push("Xỉu áp đảo");
         else if (tCount >= 5) parts.push("Nghiêng Tài");
-        else if (tCount <= 2) parts.push("Nghiêng Xỉu");
+        else if (tCount <= 3) parts.push("Nghiêng Xỉu");
         else parts.push("Cân bằng");
     }
     return `[${parts.join(', ')}] - ${patternStr}`;
@@ -581,12 +532,12 @@ app.get("/", async (req, res) => {
         for (const item of history) {
             if (item.phien > lastPhien) {
                 globalHistory.push(item);
-                masterAI.addSession(item);
+                supremeAI.addSession(item);
                 lastPhien = item.phien;
                 if (lastPrediction && globalHistory.length >= 2) {
                     const prevSession = globalHistory[globalHistory.length - 2];
                     updateStats(lastPrediction, prevSession.ket_qua);
-                    masterAI.feedback(prevSession.ket_qua === 'tài' ? 'Tài' : 'Xỉu');
+                    supremeAI.feedback(prevSession.ket_qua === 'tài' ? 'Tài' : 'Xỉu');
                     lastPrediction = null;
                 }
             }
@@ -595,7 +546,7 @@ app.get("/", async (req, res) => {
 
         const latest = history[history.length - 1];
         const pattern = analyzeCau(history);
-        const predict = masterAI.predict();
+        const predict = supremeAI.predict();
         lastPrediction = predict.prediction === 'Tài' ? 'tài' : 'xỉu';
 
         const accuracy = stats.totalPredictions > 0 ? ((stats.totalCorrect / stats.totalPredictions) * 100).toFixed(1) : '0.0';
@@ -648,12 +599,12 @@ app.get("/taixiu", async (req, res) => {
         for (const item of history) {
             if (item.phien > lastPhien) {
                 globalHistory.push(item);
-                masterAI.addSession(item);
+                supremeAI.addSession(item);
                 lastPhien = item.phien;
                 if (lastPrediction && globalHistory.length >= 2) {
                     const prevSession = globalHistory[globalHistory.length - 2];
                     updateStats(lastPrediction, prevSession.ket_qua);
-                    masterAI.feedback(prevSession.ket_qua === 'tài' ? 'Tài' : 'Xỉu');
+                    supremeAI.feedback(prevSession.ket_qua === 'tài' ? 'Tài' : 'Xỉu');
                     lastPrediction = null;
                 }
             }
@@ -661,7 +612,7 @@ app.get("/taixiu", async (req, res) => {
         if (globalHistory.length > 200) globalHistory = globalHistory.slice(-200);
         const latest = history[history.length - 1];
         const pattern = analyzeCau(history);
-        const predict = masterAI.predict();
+        const predict = supremeAI.predict();
         lastPrediction = predict.prediction === 'Tài' ? 'tài' : 'xỉu';
         const accuracy = stats.totalPredictions > 0 ? ((stats.totalCorrect / stats.totalPredictions) * 100).toFixed(1) : '0.0';
         res.json({
@@ -716,6 +667,6 @@ app.get("/stats", (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log("🎯 Master Algorithm chạy tại port " + PORT);
+    console.log("🌟 Supreme V9 chạy tại port " + PORT);
     console.log("🔗 API: " + API_URL);
 });
