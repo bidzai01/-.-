@@ -37,7 +37,269 @@ function normalizeData(rawData) {
 }
 
 // ======================================================
-// 1. MARKOV ENGINE
+// 1. CAU ANALYZER - HỌC TOÀN BỘ CẦU
+// ======================================================
+class CauAnalyzer {
+    constructor() {
+        this.cauStats = {
+            c11: { count: 0, tiep: 0, gay: 0, maxLen: 0 },
+            c22: { count: 0, tiep: 0, gay: 0 },
+            c33: { count: 0, tiep: 0, gay: 0 },
+            betTai: { streaks: {}, total: 0, avgLen: 0 },
+            betXiu: { streaks: {}, total: 0, avgLen: 0 },
+            zigzag: { count: 0, lengths: [] },
+            c123: { count: 0, success: 0 },
+            tamGiac: { count: 0, success: 0 },
+            doiXung: { count: 0, success: 0 },
+            patterns: new Map(),
+            scorePatterns: {},
+            dicePatterns: {}
+        };
+        this.learningHistory = [];
+        this.accuracy = { total: 0, correct: 0 };
+        this.lastPrediction = null;
+    }
+
+    learnFromData(data) {
+        if (!data || data.length < 20) return;
+        const results = data.map(d => d.ket_qua === 'Tài' ? 'T' : 'X');
+        const scores = data.map(d => d.tong);
+        const dices = data.map(d => [d.xuc_xac_1, d.xuc_xac_2, d.xuc_xac_3]);
+
+        this._learnC11(results);
+        this._learnC22(results);
+        this._learnC33(results);
+        this._learnBet(results, 'T');
+        this._learnBet(results, 'X');
+        this._learnZigzag(results);
+        this._learnC123(results);
+        this._learnTamGiac(results);
+        this._learnDoiXung(results);
+        this._learnPatterns(results);
+        this._learnScores(scores, results);
+        this._learnDices(dices, results);
+    }
+
+    _learnC11(results) {
+        let count = 0, currentLen = 0, maxLen = 0, inC11 = false;
+        for (let i = 1; i < results.length; i++) {
+            if (results[i] !== results[i - 1]) { currentLen++; inC11 = true; if (currentLen > maxLen) maxLen = currentLen; }
+            else {
+                if (inC11 && currentLen >= 3) {
+                    count++;
+                    const tiep = (i + 1 < results.length && results[i + 1] !== results[i]);
+                    if (tiep) this.cauStats.c11.tiep++; else this.cauStats.c11.gay++;
+                }
+                currentLen = 0; inC11 = false;
+            }
+        }
+        this.cauStats.c11.count = count; this.cauStats.c11.maxLen = maxLen;
+    }
+
+    _learnC22(results) {
+        let count = 0;
+        for (let i = 0; i < results.length - 4; i++) {
+            if (results[i] === results[i + 1] && results[i + 2] === results[i + 3] && results[i] !== results[i + 2]) {
+                count++;
+                const tiep = (i + 4 < results.length && results[i + 4] === results[i + 2]);
+                if (tiep) this.cauStats.c22.tiep++; else this.cauStats.c22.gay++;
+            }
+        }
+        this.cauStats.c22.count = count;
+    }
+
+    _learnC33(results) {
+        let count = 0;
+        for (let i = 0; i < results.length - 6; i++) {
+            if (results[i] === results[i + 1] && results[i + 1] === results[i + 2] && results[i + 3] === results[i + 4] && results[i + 4] === results[i + 5] && results[i] !== results[i + 3]) {
+                count++;
+                const tiep = (i + 6 < results.length && results[i + 6] === results[i]);
+                if (tiep) this.cauStats.c33.tiep++; else this.cauStats.c33.gay++;
+            }
+        }
+        this.cauStats.c33.count = count;
+    }
+
+    _learnBet(results, type) {
+        const target = this.cauStats[type === 'T' ? 'betTai' : 'betXiu'];
+        let streak = 0;
+        for (let i = 0; i < results.length; i++) {
+            if (results[i] === type) streak++;
+            else { if (streak >= 2) { target.streaks[streak] = (target.streaks[streak] || 0) + 1; target.total++; } streak = 0; }
+        }
+        let totalLen = 0;
+        for (const [len, cnt] of Object.entries(target.streaks)) totalLen += parseInt(len) * cnt;
+        target.avgLen = target.total > 0 ? totalLen / target.total : 0;
+    }
+
+    _learnZigzag(results) {
+        let flips = 0, zigzagStart = -1;
+        for (let i = 1; i < results.length; i++) {
+            if (results[i] !== results[i - 1]) { if (zigzagStart === -1) zigzagStart = i - 1; flips++; }
+            else { if (flips >= 4) { this.cauStats.zigzag.count++; this.cauStats.zigzag.lengths.push(flips); } flips = 0; zigzagStart = -1; }
+        }
+    }
+
+    _learnC123(results) {
+        const patterns = ['TXXTTT', 'XTTXXX'];
+        for (const pat of patterns) {
+            for (let i = 0; i < results.length - 6; i++) {
+                if (results.slice(i, i + 6).join('') === pat) {
+                    this.cauStats.c123.count++;
+                    const expected = pat === 'TXXTTT' ? 'X' : 'T';
+                    if (i + 6 < results.length && results[i + 6] === expected) this.cauStats.c123.success++;
+                }
+            }
+        }
+    }
+
+    _learnTamGiac(results) {
+        const patterns = ['TXTXT', 'XTXTX'];
+        for (const pat of patterns) {
+            for (let i = 0; i < results.length - 5; i++) {
+                if (results.slice(i, i + 5).join('') === pat) {
+                    this.cauStats.tamGiac.count++;
+                    const expected = pat === 'TXTXT' ? 'X' : 'T';
+                    if (i + 5 < results.length && results[i + 5] === expected) this.cauStats.tamGiac.success++;
+                }
+            }
+        }
+    }
+
+    _learnDoiXung(results) {
+        for (let len = 3; len <= 6; len++) {
+            for (let i = 0; i < results.length - len * 2; i++) {
+                const left = results.slice(i, i + len);
+                const right = results.slice(i + len, i + len * 2).reverse();
+                let match = true;
+                for (let j = 0; j < len; j++) { if (left[j] !== right[j]) { match = false; break; } }
+                if (match) { this.cauStats.doiXung.count++; if (i + len * 2 < results.length && results[i + len * 2] === results[i]) this.cauStats.doiXung.success++; }
+            }
+        }
+    }
+
+    _learnPatterns(results) {
+        for (let len = 3; len <= 7; len++) {
+            for (let i = 0; i < results.length - len; i++) {
+                const pattern = results.slice(i, i + len).join('');
+                const next = results[i + len];
+                if (!this.cauStats.patterns.has(pattern)) this.cauStats.patterns.set(pattern, { T: 0, X: 0 });
+                this.cauStats.patterns.get(pattern)[next]++;
+            }
+        }
+    }
+
+    _learnScores(scores, results) {
+        for (let i = 0; i < scores.length - 1; i++) {
+            const score = scores[i];
+            const next = results[i + 1];
+            if (!this.cauStats.scorePatterns[score]) this.cauStats.scorePatterns[score] = { T: 0, X: 0 };
+            this.cauStats.scorePatterns[score][next]++;
+        }
+    }
+
+    _learnDices(dices, results) {
+        for (let i = 0; i < dices.length - 1; i++) {
+            const diceKey = dices[i].join('-');
+            const next = results[i + 1];
+            if (!this.cauStats.dicePatterns[diceKey]) this.cauStats.dicePatterns[diceKey] = { T: 0, X: 0 };
+            this.cauStats.dicePatterns[diceKey][next]++;
+        }
+    }
+
+    // ============================================
+    // DỰ ĐOÁN
+    // ============================================
+    predict(R, scores, lastDice) {
+        if (!R || R.length < 5) return [];
+        const allPredictions = [];
+        const last = R[R.length - 1];
+        const lastTotal = scores[scores.length - 1];
+        const dice = lastDice || [0, 0, 0];
+
+        // 1. BỆT
+        let streak = 1;
+        for (let i = R.length - 2; i >= 0; i--) { if (R[i] === last) streak++; else break; }
+        const betStats = last === 'T' ? this.cauStats.betTai : this.cauStats.betXiu;
+        const betCount = betStats.streaks[streak] || 0;
+        const longerCount = Object.entries(betStats.streaks).filter(([len]) => parseInt(len) > streak).reduce((sum, [_, cnt]) => sum + cnt, 0);
+        const totalBet = betCount + longerCount;
+        const tiepRate = totalBet > 0 ? betCount / totalBet : 0.5;
+
+        if (streak >= 2 && streak <= 3) allPredictions.push({ p: last, c: Math.round(55 + tiepRate * 30), w: 2.0, s: 'bet_tiep' });
+        else if (streak >= 4 && streak <= 5) { const gayRate = 1 - tiepRate; allPredictions.push({ p: last === 'T' ? 'X' : 'T', c: Math.round(60 + gayRate * 25), w: 2.5, s: 'bet_gay' }); }
+        else if (streak >= 6) allPredictions.push({ p: last === 'T' ? 'X' : 'T', c: 76, w: 3.0, s: 'bet_gay_dai' });
+
+        // 2. CẦU 1-1
+        let c11Count = 1;
+        for (let i = R.length - 2; i >= 0; i--) { if (R[i] !== R[i + 1]) c11Count++; else break; }
+        if (c11Count >= 3) {
+            const c11Ratio = this.cauStats.c11.tiep / Math.max(1, this.cauStats.c11.tiep + this.cauStats.c11.gay);
+            allPredictions.push({ p: last === 'T' ? 'X' : 'T', c: Math.round(60 + c11Ratio * 30), w: 1.8, s: 'cau_11' });
+        }
+
+        // 3. CẦU 2-2
+        if (R.length >= 4) {
+            const last4 = R.slice(-4);
+            if (last4[0] === last4[1] && last4[2] === last4[3] && last4[0] !== last4[2]) {
+                const c22Ratio = this.cauStats.c22.tiep / Math.max(1, this.cauStats.c22.tiep + this.cauStats.c22.gay);
+                allPredictions.push({ p: last4[2], c: Math.round(65 + c22Ratio * 20), w: 2.0, s: 'cau_22' });
+            }
+        }
+
+        // 4. ZIGZAG
+        let flips = 0;
+        for (let i = R.length - 9; i < R.length; i++) { if (i > 0 && R[i] !== R[i - 1]) flips++; }
+        if (flips >= 7) allPredictions.push({ p: last === 'T' ? 'X' : 'T', c: 68, w: 1.8, s: 'zigzag' });
+        if (flips <= 2 && R.length >= 10) allPredictions.push({ p: last, c: 58, w: 1.3, s: 'it_doi' });
+
+        // 5. ĐIỂM SỐ
+        if (lastTotal <= 4) { const sd = this.cauStats.scorePatterns[lastTotal]; const probT = sd ? sd.T / (sd.T + sd.X) : 0.79; allPredictions.push({ p: 'T', c: Math.round(70 + probT * 20), w: 2.5, s: 'score_thap' }); }
+        if (lastTotal >= 17) { const sd = this.cauStats.scorePatterns[lastTotal]; const probX = sd ? sd.X / (sd.T + sd.X) : 0.73; allPredictions.push({ p: 'X', c: Math.round(70 + probX * 20), w: 2.5, s: 'score_cao' }); }
+
+        // 6. XÚC XẮC
+        const diceKey = dice.join('-');
+        const diceData = this.cauStats.dicePatterns[diceKey];
+        if (diceData && (diceData.T + diceData.X) >= 3) {
+            const probT = diceData.T / (diceData.T + diceData.X);
+            if (Math.abs(probT - 0.5) > 0.1) allPredictions.push({ p: probT > 0.5 ? 'T' : 'X', c: Math.round(55 + Math.abs(probT - 0.5) * 40), w: 1.8, s: 'dice_pattern' });
+        }
+        const oneCount = dice.filter(x => x === 1).length;
+        if (oneCount >= 2) allPredictions.push({ p: 'T', c: 68, w: 2.0, s: 'dice_cap1' });
+        const sixCount = dice.filter(x => x === 6).length;
+        if (sixCount >= 2) allPredictions.push({ p: 'X', c: 66, w: 2.0, s: 'dice_cap6' });
+
+        // 7. PATTERN
+        for (let len = 5; len >= 3; len--) {
+            if (R.length >= len) {
+                const pattern = R.slice(-len).join('');
+                const patData = this.cauStats.patterns.get(pattern);
+                if (patData && (patData.T + patData.X) >= 3) {
+                    const probT = patData.T / (patData.T + patData.X);
+                    if (Math.abs(probT - 0.5) > 0.15) {
+                        allPredictions.push({ p: probT > 0.5 ? 'T' : 'X', c: Math.round(55 + Math.abs(probT - 0.5) * 40), w: 1.6, s: `pattern_${len}` });
+                        break;
+                    }
+                }
+            }
+        }
+
+        return allPredictions;
+    }
+
+    learn(actualResult) {
+        if (this.lastPrediction) {
+            const actual = actualResult === 'Tài' ? 'T' : 'X';
+            this.accuracy.total++;
+            if (this.lastPrediction === actual) this.accuracy.correct++;
+            this.learningHistory.push({ time: new Date().toISOString(), predicted: this.lastPrediction, actual, correct: this.lastPrediction === actual });
+            this.lastPrediction = null;
+        }
+    }
+}
+
+// ======================================================
+// 2. MARKOV ENGINE
 // ======================================================
 class MarkovEngine {
     static predictMultiOrder(seq) {
@@ -57,10 +319,7 @@ class MarkovEngine {
             const total = possible.T + possible.X;
             const probTai = possible.T / total;
             const conf = (Math.max(possible.T, possible.X) / total) * 100;
-            if (conf > bestConf) {
-                bestConf = conf;
-                best = probTai > 0.5 ? "T" : "X";
-            }
+            if (conf > bestConf) { bestConf = conf; best = probTai > 0.5 ? "T" : "X"; }
         }
         return best ? { p: best, c: Math.round(bestConf) } : null;
     }
@@ -74,89 +333,6 @@ class MarkovEngine {
         if (trans[last].X > trans[last].T) return 'X';
         return null;
     }
-
-    static markov2(history) {
-        if (history.length < 3) return null;
-        const last2 = history.slice(-2);
-        const trans = new Map();
-        for (let i = 0; i < history.length - 2; i++) {
-            const key = history[i] + ',' + history[i + 1];
-            const next = history[i + 2];
-            if (!trans.has(key)) trans.set(key, { T: 0, X: 0 });
-            trans.get(key)[next]++;
-        }
-        const possible = trans.get(last2.join(','));
-        if (!possible) return null;
-        return possible.T > possible.X ? 'T' : (possible.X > possible.T ? 'X' : null);
-    }
-
-    static markov3(history) {
-        if (history.length < 4) return null;
-        const last3 = history.slice(-3);
-        const trans = new Map();
-        for (let i = 0; i < history.length - 3; i++) {
-            const key = history.slice(i, i + 3).join(',');
-            const next = history[i + 3];
-            if (!trans.has(key)) trans.set(key, { T: 0, X: 0 });
-            trans.get(key)[next]++;
-        }
-        const possible = trans.get(last3.join(','));
-        if (!possible) return null;
-        return possible.T > possible.X ? 'T' : (possible.X > possible.T ? 'X' : null);
-    }
-}
-
-// ======================================================
-// 2. MARKOV XÚC XẮC
-// ======================================================
-class MarkovXucXac {
-    constructor(bac = 3) {
-        this.bac = Math.min(4, Math.max(1, bac));
-        this.transitions = new Map();
-        this.history = [];
-    }
-
-    static chuyenLoai(diem) {
-        if (diem === 1 || diem === 2) return 1;
-        if (diem === 3 || diem === 4) return 2;
-        return 3;
-    }
-
-    themDuLieu(d1, d2, d3) {
-        const filtered = [d1, d2, d3].map(x => MarkovXucXac.chuyenLoai(x));
-        this.history.push(...filtered);
-        if (this.history.length > 60) this.history = this.history.slice(-60);
-        this._xayDungMaTran();
-    }
-
-    _xayDungMaTran() {
-        this.transitions.clear();
-        const len = this.history.length;
-        if (len < this.bac + 1) return;
-        for (let i = this.bac; i < len; i++) {
-            for (let b = 1; b <= this.bac; b++) {
-                const state = [];
-                for (let j = b - 1; j >= 0; j--) state.push(this.history[i - j]);
-                const stateKey = state.join(',');
-                const nextVal = this.history[i];
-                if (!this.transitions.has(stateKey)) this.transitions.set(stateKey, new Map());
-                const nextMap = this.transitions.get(stateKey);
-                nextMap.set(nextVal, (nextMap.get(nextVal) || 0) + 1);
-            }
-        }
-    }
-
-    duDoan() {
-        if (this.history.length < 2) return 2;
-        const dem = { 1: 0, 2: 0, 3: 0 };
-        this.history.forEach(v => dem[v]++);
-        return dem[1] > dem[3] ? 1 : 3;
-    }
-
-    phanTich() {
-        const duDoanSo = this.duDoan();
-        return { p: duDoanSo === 1 ? "X" : "T", c: 60 };
-    }
 }
 
 // ======================================================
@@ -167,28 +343,12 @@ class CauDetector {
         const patterns = [];
         const h = history.join('');
         const len = history.length;
-
         if (len >= 4 && h.slice(-4) === "TXTX") patterns.push({ p: 'X', c: 78 });
         if (len >= 4 && h.slice(-4) === "XTXT") patterns.push({ p: 'T', c: 78 });
-        if (len >= 4 && h.slice(-4) === "TTXX") patterns.push({ p: 'T', c: 74 });
-        if (len >= 4 && h.slice(-4) === "XXTT") patterns.push({ p: 'X', c: 74 });
-        if (len >= 6 && h.slice(-6) === "TTTXXX") patterns.push({ p: 'T', c: 72 });
-        if (len >= 6 && h.slice(-6) === "XXXTTT") patterns.push({ p: 'X', c: 72 });
         if (len >= 6 && h.slice(-6) === "TXXTTT") patterns.push({ p: 'X', c: 70 });
         if (len >= 6 && h.slice(-6) === "XTTXXX") patterns.push({ p: 'T', c: 70 });
         if (len >= 5 && h.slice(-5) === "TXTXT") patterns.push({ p: 'X', c: 74 });
         if (len >= 5 && h.slice(-5) === "XTXTX") patterns.push({ p: 'T', c: 74 });
-
-        let tRun = 0;
-        for (let i = len - 1; i >= 0; i--) { if (history[i] === 'T') tRun++; else break; }
-        if (tRun >= 6) patterns.push({ p: 'X', c: 76 });
-        else if (tRun >= 4) patterns.push({ p: 'T', c: 66 });
-
-        let xRun = 0;
-        for (let i = len - 1; i >= 0; i--) { if (history[i] === 'X') xRun++; else break; }
-        if (xRun >= 6) patterns.push({ p: 'T', c: 76 });
-        else if (xRun >= 4) patterns.push({ p: 'X', c: 66 });
-
         return patterns;
     }
 }
@@ -201,22 +361,9 @@ class TechnicalIndicators {
         if (history.length < period) return null;
         const nums = history.slice(-period).map(c => c === 'T' ? 1 : 0);
         let gains = 0, losses = 0;
-        for (let i = 1; i < nums.length; i++) {
-            const diff = nums[i] - nums[i - 1];
-            if (diff > 0) gains += diff; else losses -= diff;
-        }
+        for (let i = 1; i < nums.length; i++) { const diff = nums[i] - nums[i - 1]; if (diff > 0) gains += diff; else losses -= diff; }
         if (losses === 0) return 100;
         return 100 - (100 / (1 + gains / losses));
-    }
-
-    static entropy(history, window = 12) {
-        if (history.length < window) return null;
-        const recent = history.slice(-window);
-        const p_t = recent.filter(r => r === 'T').length / window;
-        if (p_t === 0 || p_t === 1) return recent[recent.length - 1];
-        const entropy = -p_t * Math.log2(p_t) - (1 - p_t) * Math.log2(1 - p_t);
-        if (entropy > 0.95) return recent[recent.length - 1] === 'T' ? 'X' : 'T';
-        return recent[recent.length - 1];
     }
 }
 
@@ -224,23 +371,6 @@ class TechnicalIndicators {
 // 5. MACHINE LEARNING
 // ======================================================
 class MachineLearning {
-    static knn(history, k = 5, lookback = 10) {
-        if (history.length < lookback + k) return null;
-        const query = history.slice(-lookback);
-        const distances = [];
-        for (let i = 0; i < history.length - lookback - 1; i++) {
-            let distance = 0;
-            for (let j = 0; j < lookback; j++) {
-                if (history[i + j] !== query[j]) distance++;
-            }
-            distances.push({ distance, next: history[i + lookback] });
-        }
-        distances.sort((a, b) => a.distance - b.distance);
-        const neighbors = distances.slice(0, k).map(d => d.next);
-        const tCount = neighbors.filter(n => n === 'T').length;
-        return tCount > k - tCount ? 'T' : 'X';
-    }
-
     static decisionTree(history) {
         if (history.length < 10) return null;
         const last1 = history[history.length - 1];
@@ -256,21 +386,13 @@ class MachineLearning {
 }
 
 // ======================================================
-// 🌟 VIP SUPREME MASTER - TẤT CẢ THUẬT TOÁN
+// 🌟 SUPREME AI MASTER - TỔNG HỢP TẤT CẢ
 // ======================================================
-class VIPSupremeMaster {
+class SupremeAIMaster {
     constructor() {
         this.history = [];
-        this.markovDice = new MarkovXucXac(3);
-        this.betStats = {};
-        this.patternMemory = new Map();
-        this._initBetStats();
-    }
-
-    _initBetStats() {
-        for (let len = 2; len <= 15; len++) {
-            this.betStats[len] = { T: { tiep: 0, gay: 0 }, X: { tiep: 0, gay: 0 } };
-        }
+        this.cauAnalyzer = new CauAnalyzer();
+        this._initialized = false;
     }
 
     addSession(sessionData) {
@@ -283,199 +405,27 @@ class VIPSupremeMaster {
         const d2 = sessionData.x2 || sessionData.xuc_xac_2 || 0;
         const d3 = sessionData.x3 || sessionData.xuc_xac_3 || 0;
         const total = sessionData.tong || (d1 + d2 + d3);
-        this.markovDice.themDuLieu(d1, d2, d3);
         this.history.push({ phien: id, result: normRes, total, dice: [d1, d2, d3] });
         if (this.history.length > 500) this.history.splice(0, 100);
-        
-        // Cập nhật thống kê bệt
-        this._updateBetStats();
-        // Cập nhật pattern memory
-        this._updatePatternMemory();
-    }
 
-    _updateBetStats() {
-        const R = this.getResults();
-        const n = R.length;
-        if (n < 3) return;
-        
-        for (let i = 0; i < n; i++) {
-            let streak = 1;
-            const current = R[i];
-            for (let j = i - 1; j >= 0; j--) {
-                if (R[j] === current) streak++;
-                else break;
-            }
-            if (streak >= 2 && i + 1 < n) {
-                const next = R[i + 1];
-                const len = Math.min(streak, 15);
-                if (next === current) {
-                    this.betStats[len][current].tiep++;
-                } else {
-                    this.betStats[len][current].gay++;
-                }
-            }
+        // Học từ dữ liệu mỗi 50 phiên
+        if (this.history.length >= 20 && this.history.length % 20 === 0) {
+            this.cauAnalyzer.learnFromData(this.history);
         }
-    }
-
-    _updatePatternMemory() {
-        const R = this.getResults();
-        const n = R.length;
-        if (n < 6) return;
-        const key = R.slice(-6, -1).join('');
-        const next = R[n - 1];
-        if (!this.patternMemory.has(key)) {
-            this.patternMemory.set(key, { T: 0, X: 0 });
-        }
-        this.patternMemory.get(key)[next]++;
     }
 
     getResults() { return this.history.map(h => h.result === 'Tài' ? 'T' : 'X'); }
     getScores() { return this.history.map(h => h.total || (h.dice ? h.dice.reduce((a, b) => a + b, 0) : 0)); }
 
-    // ============================================
-    // PHÂN TÍCH BỆT CHUYÊN SÂU
-    // ============================================
-    _analyzeBet(R) {
-        const n = R.length;
-        if (n < 2) return [];
-        const S = [];
-        const last = R[n - 1];
-        let streak = 1;
-        for (let i = n - 2; i >= 0; i--) { if (R[i] === last) streak++; else break; }
-
-        const stat = this.betStats[Math.min(streak, 15)]?.[last];
-        
-        if (streak >= 7) {
-            if (stat) {
-                const total = stat.tiep + stat.gay;
-                const gayRate = total > 0 ? stat.gay / total : 0.75;
-                S.push({ p: last === 'T' ? 'X' : 'T', c: Math.round(70 + gayRate * 15), w: 2.5, s: 'bet_gay_dai' });
-            } else {
-                S.push({ p: last === 'T' ? 'X' : 'T', c: 76, w: 2.5, s: 'bet_gay_dai' });
-            }
-        } else if (streak >= 5) {
-            if (stat) {
-                const total = stat.tiep + stat.gay;
-                const gayRate = total > 0 ? stat.gay / total : 0.65;
-                S.push({ p: last === 'T' ? 'X' : 'T', c: Math.round(60 + gayRate * 20), w: 2.0, s: 'bet_gay_vua' });
-            } else {
-                S.push({ p: last === 'T' ? 'X' : 'T', c: 66, w: 2.0, s: 'bet_gay_vua' });
-            }
-        } else if (streak >= 3) {
-            if (stat) {
-                const total = stat.tiep + stat.gay;
-                const tiepRate = total > 0 ? stat.tiep / total : 0.6;
-                S.push({ p: last, c: Math.round(55 + tiepRate * 25), w: 1.5, s: 'bet_tiep' });
-            } else {
-                S.push({ p: last, c: 58, w: 1.5, s: 'bet_tiep' });
-            }
-        }
-
-        return S;
-    }
-
-    // ============================================
-    // PHÂN TÍCH ĐIỂM BẺ CẦU
-    // ============================================
-    _analyzeScoreBreak(scores, R) {
-        const S = [];
-        const lastScore = scores[scores.length - 1];
-        const prevScore = scores.length >= 2 ? scores[scores.length - 2] : lastScore;
-        const lastResult = R[R.length - 1];
-        const delta = lastScore - prevScore;
-
-        if (delta <= -5 && lastResult === 'T') S.push({ p: 'X', c: 68, w: 1.8, s: 'score_giam_manh' });
-        if (delta >= 5 && lastResult === 'X') S.push({ p: 'T', c: 68, w: 1.8, s: 'score_tang_manh' });
-        if (lastScore <= 4) S.push({ p: 'T', c: 78, w: 2.2, s: 'score_cuc_thap' });
-        if (lastScore >= 17) S.push({ p: 'X', c: 74, w: 2.2, s: 'score_cuc_cao' });
-
-        const last3 = scores.slice(-3);
-        if (last3.every(s => s <= 7)) S.push({ p: 'T', c: 64, w: 1.5, s: 'score_3thap' });
-        if (last3.every(s => s >= 14)) S.push({ p: 'X', c: 64, w: 1.5, s: 'score_3cao' });
-
-        return S;
-    }
-
-    // ============================================
-    // PHÂN TÍCH XÚC XẮC BẺ CẦU
-    // ============================================
-    _analyzeDiceBreak(lastDice) {
-        if (!lastDice) return [];
-        const S = [];
-        const [d1, d2, d3] = lastDice;
-        const total = d1 + d2 + d3;
-
-        if (d1 === d2 && d2 === d3) {
-            S.push({ p: d1 >= 4 ? 'X' : 'T', c: 68, w: 1.6, s: 'dice_3giong' });
-        }
-        const oneCount = [d1, d2, d3].filter(x => x === 1).length;
-        if (oneCount >= 2) S.push({ p: 'T', c: 62, w: 1.3, s: 'dice_cap1' });
-        const sixCount = [d1, d2, d3].filter(x => x === 6).length;
-        if (sixCount >= 2 && total >= 15) S.push({ p: 'X', c: 62, w: 1.3, s: 'dice_cap6' });
-
-        return S;
-    }
-
-    // ============================================
-    // PHÂN TÍCH NHỊP CẦU
-    // ============================================
-    _analyzeRhythm(R) {
-        const n = R.length;
-        if (n < 10) return [];
-        const S = [];
-        let flips = 0;
-        for (let i = n - 9; i < n; i++) { if (R[i] !== R[i - 1]) flips++; }
-
-        if (flips >= 7) S.push({ p: R[n - 1] === 'T' ? 'X' : 'T', c: 64, w: 1.5, s: 'rhythm_zigzag' });
-        if (flips <= 2) S.push({ p: R[n - 1], c: 58, w: 1.2, s: 'rhythm_bet' });
-
-        return S;
-    }
-
-    // ============================================
-    // PHÂN TÍCH CẦU NÂNG CAO
-    // ============================================
-    _analyzeAdvancedCau(R) {
-        const n = R.length;
-        if (n < 12) return [];
-        const S = [];
-        const last12 = R.slice(-12);
-        const first6 = last12.slice(0, 6).join('');
-        const last6 = last12.slice(6, 12).join('');
-        
-        if (first6 === last6) {
-            S.push({ p: last6[0] === 'T' ? 'X' : 'T', c: 62, w: 1.3, s: 'cau_doi_xung' });
-        }
-
-        return S;
-    }
-
-    // ============================================
-    // PATTERN MEMORY 5 PHIÊN
-    // ============================================
-    _analyzeMemory5(R) {
-        if (R.length < 6) return [];
-        const S = [];
-        const key = R.slice(-6, -1).join('');
-        const mem = this.patternMemory.get(key);
-        
-        if (mem && (mem.T + mem.X) >= 3) {
-            const total = mem.T + mem.X;
-            const probT = mem.T / total;
-            if (Math.abs(probT - 0.5) >= 0.15) {
-                S.push({ p: probT > 0.5 ? 'T' : 'X', c: Math.round(55 + Math.abs(probT - 0.5) * 45), w: 1.6, s: 'pattern_5' });
-            }
-        }
-        
-        return S;
-    }
-
-    // ============================================
-    // 🎯 DỰ ĐOÁN TỔNG HỢP
-    // ============================================
     predict() {
         const n = this.history.length;
         if (n < 5) return { prediction: 'Cần thêm dữ liệu', confidence: 50 };
+
+        // Học nếu chưa có
+        if (!this._initialized && n >= 20) {
+            this.cauAnalyzer.learnFromData(this.history);
+            this._initialized = true;
+        }
 
         const R = this.getResults();
         const scores = this.getScores();
@@ -485,44 +435,28 @@ class VIPSupremeMaster {
 
         // === THUẬT TOÁN CƠ BẢN ===
         const mm = MarkovEngine.predictMultiOrder(R);
-        if (mm) all.push({ ...mm, w: 1.2, s: 'markov_multi' });
+        if (mm) all.push({ ...mm, w: 1.0, s: 'markov_multi' });
         const m1 = MarkovEngine.markov1(R);
-        if (m1) all.push({ p: m1, c: 55, w: 0.7, s: 'markov1' });
-        const m2 = MarkovEngine.markov2(R);
-        if (m2) all.push({ p: m2, c: 58, w: 0.7, s: 'markov2' });
-        const m3 = MarkovEngine.markov3(R);
-        if (m3) all.push({ p: m3, c: 60, w: 0.7, s: 'markov3' });
+        if (m1) all.push({ p: m1, c: 55, w: 0.6, s: 'markov1' });
 
         const cauPatterns = CauDetector.detectAll(R);
-        cauPatterns.forEach(p => all.push({ ...p, w: 1.0, s: 'cau_pattern' }));
+        cauPatterns.forEach(p => all.push({ ...p, w: 0.9, s: 'cau_pattern' }));
 
         const rsiVal = TechnicalIndicators.rsi(R);
-        if (rsiVal > 70) all.push({ p: 'X', c: 64, w: 0.9, s: 'rsi' });
-        else if (rsiVal < 30) all.push({ p: 'T', c: 64, w: 0.9, s: 'rsi' });
+        if (rsiVal > 70) all.push({ p: 'X', c: 64, w: 0.8, s: 'rsi' });
+        else if (rsiVal < 30) all.push({ p: 'T', c: 64, w: 0.8, s: 'rsi' });
 
-        const ent = TechnicalIndicators.entropy(R);
-        if (ent) all.push({ p: ent, c: 55, w: 0.7, s: 'entropy' });
-
-        const knn = MachineLearning.knn(R);
-        if (knn) all.push({ p: knn, c: 60, w: 0.9, s: 'knn' });
         const dt = MachineLearning.decisionTree(R);
-        if (dt) all.push({ p: dt, c: 62, w: 0.9, s: 'decision_tree' });
+        if (dt) all.push({ p: dt, c: 62, w: 0.8, s: 'decision_tree' });
 
-        const diceMarkov = this.markovDice.phanTich();
-        all.push({ p: diceMarkov.p, c: diceMarkov.c, w: 0.8, s: 'dice_markov' });
-
-        // === THUẬT TOÁN VIP MỚI ===
-        all.push(...this._analyzeBet(R));
-        all.push(...this._analyzeScoreBreak(scores, R));
-        all.push(...this._analyzeDiceBreak(lastDice));
-        all.push(...this._analyzeRhythm(R));
-        all.push(...this._analyzeAdvancedCau(R));
-        all.push(...this._analyzeMemory5(R));
+        // === THUẬT TOÁN AI MASTER (CauAnalyzer) ===
+        const aiPreds = this.cauAnalyzer.predict(R, scores, lastDice);
+        all.push(...aiPreds.map(p => ({ ...p, w: p.w || 1.5 })));
 
         if (all.length === 0) return { prediction: R[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 52 };
 
         all.sort((a, b) => (b.w * b.c) - (a.w * a.c));
-        const top = all.slice(0, 35);
+        const top = all.slice(0, 30);
 
         let sT = 0, sX = 0, tW = 0;
         for (const s of top) {
@@ -559,7 +493,7 @@ class VIPSupremeMaster {
 // ======================================================
 // KHỞI TẠO AI
 // ======================================================
-const master = new VIPSupremeMaster();
+const master = new SupremeAIMaster();
 
 // ======================================================
 // ANALYZE CAU - 10 PHIÊN
@@ -703,7 +637,7 @@ async function autoScan() {
 }
 
 app.listen(PORT, () => {
-    console.log("🌟 VIP Supreme Master chạy tại port " + PORT);
+    console.log("🌟 Supreme AI Master chạy tại port " + PORT);
     console.log("🔗 API: " + API_URL);
     autoScan();
 });
