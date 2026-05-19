@@ -33,9 +33,9 @@ function normalizeData(rawData) {
 }
 
 // ======================================================
-// 🌟 SUPREME AI V3 - 500+ THUẬT TOÁN - SIÊU CHUẨN
+// 🌟 SUPREME AI V7 - FULL 27+ THUẬT TOÁN - SIÊU CHUẨN
 // ======================================================
-class SupremeAIV3 {
+class SupremeAIV7 {
     constructor() {
         this.history = [];
         this.DB = {};
@@ -54,124 +54,147 @@ class SupremeAIV3 {
         const total = sessionData.tong || (d1 + d2 + d3);
         this.history.push({ phien: id, result: normRes, total, dice: [d1, d2, d3] });
         if (this.history.length > 500) this.history.splice(0, 100);
-        if (this.history.length >= 20 && this.history.length % 10 === 0) this._learnAll();
+        if (this.history.length >= 20 && this.history.length % 10 === 0) this._deepLearn();
     }
 
-    _learnAll() {
+    _deepLearn() {
         const R = this.history.map(h => h.result === 'Tài' ? 'T' : 'X');
         const S = this.history.map(h => h.tong);
         const D = this.history.map(h => h.dice);
+        const L = this.history.length;
 
         this.DB = {
             score: {}, dice: {}, bet: { T: {}, X: {} },
-            pattern: new Map(), markov: { 1: {}, 2: {}, 3: {}, 4: {}, 5: {} },
-            c11: { tiep: 0, gay: 0 }, c22: { tiep: 0, gay: 0 }, c33: { tiep: 0, gay: 0 },
-            c123: { tiep: 0, gay: 0 }, c321: { tiep: 0, gay: 0 },
-            tamgiac: { tiep: 0, gay: 0 }, zigzag: { tiep: 0, gay: 0 },
-            doixung: { tiep: 0, gay: 0 },
+            pattern: new Map(), markov: { 2: {}, 3: {}, 4: {}, 5: {} },
             triple: { T: 0, X: 0 }, pair1: { T: 0, X: 0 }, pair6: { T: 0, X: 0 },
-            lowScore: { T: 0, X: 0 }, highScore: { T: 0, X: 0 },
-            freq10: { nhieuTai: { T: 0, X: 0 }, nhieuXiu: { T: 0, X: 0 } },
-            momentum: { tangManh: { T: 0, X: 0 }, giamManh: { T: 0, X: 0 } }
+            lowS: { T: 0, X: 0 }, highS: { T: 0, X: 0 },
+            c11: { t: 0, g: 0 }, c22: { t: 0, g: 0 }, c33: { t: 0, g: 0 },
+            zigzag: { t: 0, g: 0 }, tamgiac: { t: 0, g: 0 },
+            rong: { t: 0, g: 0 }, ho: { t: 0, g: 0 },
+            c123: { t: 0, g: 0 }, c321: { t: 0, g: 0 },
+            c1212: { t: 0, g: 0 }, c1122: { t: 0, g: 0 },
+            doixung: { t: 0, g: 0 }, bacthang: { t: 0, g: 0 },
+            freq: { nT: { T: 0, X: 0 }, nX: { T: 0, X: 0 } },
+            mom: { up: { T: 0, X: 0 }, dn: { T: 0, X: 0 } },
+            scoreStreak: { up3: { T: 0, X: 0 }, dn3: { T: 0, X: 0 } },
+            diceHot: {}, diceCold: {}
         };
 
         // Điểm & Xúc xắc
-        for (let i = 0; i < S.length - 1; i++) {
-            const s = S[i], n = R[i + 1], k = D[i].join('-');
-            if (!this.DB.score[s]) this.DB.score[s] = { T: 0, X: 0, total: 0 };
-            this.DB.score[s][n]++; this.DB.score[s].total++;
-            if (!this.DB.dice[k]) this.DB.dice[k] = { T: 0, X: 0, total: 0 };
-            this.DB.dice[k][n]++; this.DB.dice[k].total++;
-            const d = D[i];
+        for (let i = 0; i < L - 1; i++) {
+            const s = S[i], n = R[i + 1], dk = D[i].join('-'), d = D[i];
+            if (!this.DB.score[s]) this.DB.score[s] = { T: 0, X: 0, t: 0 };
+            this.DB.score[s][n]++; this.DB.score[s].t++;
+            if (!this.DB.dice[dk]) this.DB.dice[dk] = { T: 0, X: 0, t: 0 };
+            this.DB.dice[dk][n]++; this.DB.dice[dk].t++;
             if (d[0] === d[1] && d[1] === d[2]) this.DB.triple[n]++;
             if (d.filter(x => x === 1).length >= 2) this.DB.pair1[n]++;
             if (d.filter(x => x === 6).length >= 2) this.DB.pair6[n]++;
-            if (s <= 4) this.DB.lowScore[n]++;
-            if (s >= 17) this.DB.highScore[n]++;
+            if (s <= 4) this.DB.lowS[n]++;
+            if (s >= 17) this.DB.highS[n]++;
+            d.forEach(face => { if (!this.DB.diceHot[face]) this.DB.diceHot[face] = 0; this.DB.diceHot[face]++; });
         }
+        for (let f = 1; f <= 6; f++) this.DB.diceCold[f] = (this.DB.diceHot[f] || 0);
 
         // Bệt
         for (const t of ['T', 'X']) {
-            let streak = 0;
-            for (let i = 0; i < R.length; i++) {
-                if (R[i] === t) streak++;
+            let st = 0;
+            for (let i = 0; i < L; i++) {
+                if (R[i] === t) st++;
                 else {
-                    if (streak >= 1) {
-                        const k = Math.min(streak, 15);
-                        if (!this.DB.bet[t][k]) this.DB.bet[t][k] = { tiep: 0, gay: 0, total: 0 };
-                        if (i < R.length) { if (R[i] !== t) this.DB.bet[t][k].gay++; else this.DB.bet[t][k].tiep++; this.DB.bet[t][k].total++; }
+                    if (st >= 1) {
+                        const k = Math.min(st, 25);
+                        if (!this.DB.bet[t][k]) this.DB.bet[t][k] = { tiep: 0, gay: 0, t: 0 };
+                        if (i < L) { if (R[i] === t) this.DB.bet[t][k].tiep++; else this.DB.bet[t][k].gay++; this.DB.bet[t][k].t++; }
                     }
-                    streak = 0;
+                    st = 0;
                 }
             }
         }
 
-        // Pattern 2-8 & Markov 1-5
-        for (let len = 2; len <= 8; len++) {
-            for (let i = 0; i < R.length - len; i++) {
-                const k = R.slice(i, i + len).join(''), n = R[i + len];
-                if (!this.DB.pattern.has(k)) this.DB.pattern.set(k, { T: 0, X: 0, total: 0 });
-                const p = this.DB.pattern.get(k); p[n]++; p.total++;
+        // Pattern & Markov
+        for (let pl = 2; pl <= 8; pl++) {
+            for (let i = 0; i < L - pl; i++) {
+                const k = R.slice(i, i + pl).join(''), n = R[i + pl];
+                if (!this.DB.pattern.has(k)) this.DB.pattern.set(k, { T: 0, X: 0, t: 0 });
+                const p = this.DB.pattern.get(k); p[n]++; p.t++;
             }
         }
-        for (let o = 1; o <= 5; o++) {
-            for (let i = 0; i < R.length - o; i++) {
+        for (let o = 2; o <= 5; o++) {
+            for (let i = 0; i < L - o; i++) {
                 const k = R.slice(i, i + o).join(''), n = R[i + o];
-                if (!this.DB.markov[o][k]) this.DB.markov[o][k] = { T: 0, X: 0, total: 0 };
-                this.DB.markov[o][k][n]++; this.DB.markov[o][k].total++;
+                if (!this.DB.markov[o][k]) this.DB.markov[o][k] = { T: 0, X: 0, t: 0 };
+                this.DB.markov[o][k][n]++; this.DB.markov[o][k].t++;
             }
         }
 
         // Cầu đặc biệt
-        for (let i = 3; i < R.length - 1; i++) {
+        for (let i = 3; i < L - 1; i++) {
             if (R[i] !== R[i-1] && R[i-1] !== R[i-2] && R[i-2] !== R[i-3]) {
-                if (R[i+1] !== R[i]) this.DB.c11.tiep++; else this.DB.c11.gay++;
+                if (R[i+1] !== R[i]) this.DB.c11.t++; else this.DB.c11.g++;
             }
             if (R[i-3] === R[i-2] && R[i-1] === R[i] && R[i-3] !== R[i-1]) {
-                if (R[i+1] === R[i]) this.DB.c22.tiep++; else this.DB.c22.gay++;
+                if (R[i+1] === R[i]) this.DB.c22.t++; else this.DB.c22.g++;
             }
         }
-        for (let i = 5; i < R.length - 1; i++) {
-            if (R[i-5]===R[i-4]&&R[i-4]===R[i-3] && R[i-2]===R[i-1]&&R[i-1]===R[i] && R[i-5]!==R[i-2]) {
-                if (R[i+1] === R[i-5]) this.DB.c33.tiep++; else this.DB.c33.gay++;
+        for (let i = 5; i < L - 1; i++) {
+            if (R[i-5]===R[i-4]&&R[i-4]===R[i-3]&&R[i-2]===R[i-1]&&R[i-1]===R[i]&&R[i-5]!==R[i-2]) {
+                if (R[i+1] === R[i-5]) this.DB.c33.t++; else this.DB.c33.g++;
             }
             let f = 0;
-            for (let j = i-4; j <= i; j++) if (j>i-4 && R[j]!==R[j-1]) f++;
-            if (f >= 4) { if (R[i+1] !== R[i]) this.DB.zigzag.tiep++; else this.DB.zigzag.gay++; }
-        }
-        for (let i = 4; i < R.length - 1; i++) {
-            const p = R.slice(i-4, i+1).join('');
-            if (p === 'TXTXT') { if (R[i+1] === 'X') this.DB.tamgiac.tiep++; else this.DB.tamgiac.gay++; }
-            if (p === 'XTXTX') { if (R[i+1] === 'T') this.DB.tamgiac.tiep++; else this.DB.tamgiac.gay++; }
-        }
-        for (let i = 5; i < R.length - 1; i++) {
+            for (let j = i-4; j <= i; j++) if (j > i-4 && R[j] !== R[j-1]) f++;
+            if (f >= 4) { if (R[i+1] !== R[i]) this.DB.zigzag.t++; else this.DB.zigzag.g++; }
+            if (R.slice(i-5, i+1).every(x => x === 'T')) { if (R[i+1] === 'X') this.DB.rong.g++; else this.DB.rong.t++; }
+            if (R.slice(i-5, i+1).every(x => x === 'X')) { if (R[i+1] === 'T') this.DB.ho.g++; else this.DB.ho.t++; }
             const p = R.slice(i-5, i+1).join('');
-            if (p === 'TXXTTT' || p === 'XTTXXX') {
-                const exp = p === 'TXXTTT' ? 'X' : 'T';
-                if (R[i+1] === exp) this.DB.c123.tiep++; else this.DB.c123.gay++;
+            if (p === 'TXXTTT' || p === 'XTTXXX') { const e = p === 'TXXTTT' ? 'X' : 'T'; if (R[i+1] === e) this.DB.c123.t++; else this.DB.c123.g++; }
+            if (p === 'TTTXXT' || p === 'XXXTTX') { const e = p === 'TTTXXT' ? 'T' : 'X'; if (R[i+1] === e) this.DB.c321.t++; else this.DB.c321.g++; }
+        }
+        for (let i = 4; i < L - 1; i++) {
+            const p = R.slice(i-4, i+1).join('');
+            if (p === 'TXTXT') { if (R[i+1] === 'X') this.DB.tamgiac.t++; else this.DB.tamgiac.g++; }
+            if (p === 'XTXTX') { if (R[i+1] === 'T') this.DB.tamgiac.t++; else this.DB.tamgiac.g++; }
+        }
+        for (let i = 7; i < L - 1; i++) {
+            if (R[i-7]===R[i-5]&&R[i-5]===R[i-3]&&R[i-6]===R[i-4]&&R[i-4]===R[i-2]&&R[i-7]!==R[i-6]) {
+                if (R[i+1] !== R[i]) this.DB.c1212.t++; else this.DB.c1212.g++;
             }
-            if (p === 'TTTXXT' || p === 'XXXTTX') {
-                const exp = p === 'TTTXXT' ? 'T' : 'X';
-                if (R[i+1] === exp) this.DB.c321.tiep++; else this.DB.c321.gay++;
+            if (R[i-7]===R[i-6]&&R[i-5]===R[i-4]&&R[i-3]===R[i-2]&&R[i-1]===R[i]&&R[i-7]!==R[i-5]&&R[i-5]!==R[i-3]) {
+                if (R[i+1] === R[i]) this.DB.c1122.t++; else this.DB.c1122.g++;
             }
         }
         for (let len = 3; len <= 6; len++) {
-            for (let i = len; i < R.length - len; i++) {
+            for (let i = len; i < L - len; i++) {
                 const left = R.slice(i-len, i), right = R.slice(i, i+len).reverse();
                 if (left.join('') === right.join('')) {
-                    if (R[i+len] === R[i-len]) this.DB.doixung.tiep++; else this.DB.doixung.gay++;
+                    if (R[i+len] === R[i-len]) this.DB.doixung.t++; else this.DB.doixung.g++;
                 }
             }
         }
+        for (let i = 5; i < L - 1; i++) {
+            const seg = []; let cnt = 1;
+            for (let j = i-4; j <= i; j++) {
+                if (j > i-4 && R[j] === R[j-1]) cnt++;
+                else if (j > i-4) { seg.push(cnt); cnt = 1; }
+            }
+            seg.push(cnt);
+            if (seg.length >= 3) {
+                const inc = seg.every((v, k) => k === 0 || v >= seg[k-1]);
+                const dec = seg.every((v, k) => k === 0 || v <= seg[k-1]);
+                if (inc || dec) { if (R[i+1] === R[i]) this.DB.bacthang.t++; else this.DB.bacthang.g++; }
+            }
+        }
 
-        // Tần suất & Momentum
-        for (let i = 10; i < R.length - 1; i++) {
-            const t = R.slice(i-9, i+1).filter(r => r === 'T').length, n = R[i + 1];
-            if (t >= 7) this.DB.freq10.nhieuTai[n]++;
-            if (t <= 3) this.DB.freq10.nhieuXiu[n]++;
-            const trend = S[i] - S[i-9];
-            if (trend > 8) this.DB.momentum.tangManh[n]++;
-            if (trend < -8) this.DB.momentum.giamManh[n]++;
+        // Tần suất & Momentum & Điểm streak
+        for (let i = 10; i < L - 1; i++) {
+            const t10 = R.slice(i-9, i+1).filter(r => r === 'T').length, n = R[i + 1];
+            if (t10 >= 7) this.DB.freq.nT[n]++;
+            if (t10 <= 3) this.DB.freq.nX[n]++;
+            const tr = S[i] - S[i-9];
+            if (tr > 8) this.DB.mom.up[n]++;
+            if (tr < -8) this.DB.mom.dn[n]++;
+            if (i >= 2 && S[i] > S[i-1] && S[i-1] > S[i-2]) this.DB.scoreStreak.up3[n]++;
+            if (i >= 2 && S[i] < S[i-1] && S[i-1] < S[i-2]) this.DB.scoreStreak.dn3[n]++;
         }
 
         this._learned = true;
@@ -183,194 +206,114 @@ class SupremeAIV3 {
     predict() {
         const n = this.history.length;
         if (n < 5) return { prediction: 'Cần thêm dữ liệu', confidence: 50 };
-        if (!this._learned && n >= 20) this._learnAll();
+        if (!this._learned && n >= 20) this._deepLearn();
 
         const R = this.getResults();
         const S = this.getScores();
         const last = this.history[n - 1];
-        const lastR = R[n - 1], lastS = S[n - 1];
-        const lastD = last.dice || [0, 0, 0];
+        const lR = R[n - 1], lS = S[n - 1];
+        const lD = last.dice || [0, 0, 0];
 
         let streak = 1;
-        for (let i = n - 2; i >= 0; i--) { if (R[i] === lastR) streak++; else break; }
-
+        for (let i = n - 2; i >= 0; i--) { if (R[i] === lR) streak++; else break; }
         let flips = 0;
         for (let i = Math.max(1, n - 9); i < n; i++) { if (R[i] !== R[i - 1]) flips++; }
-
         let c11len = 1;
         for (let i = n - 2; i >= 0; i--) { if (R[i] !== R[i + 1]) c11len++; else break; }
-
-        const t10 = R.slice(-10).filter(r => r === 'T').length;
         const trend5 = n >= 10 ? S.slice(-5).reduce((a,b)=>a+b,0)/5 - S.slice(-10,-5).reduce((a,b)=>a+b,0)/5 : 0;
+        const t10 = R.slice(-10).filter(r => r === 'T').length;
+        const scoreUp3 = n >= 3 && S[n-3] < S[n-2] && S[n-2] < S[n-1];
+        const scoreDn3 = n >= 3 && S[n-3] > S[n-2] && S[n-2] > S[n-1];
 
         const SIG = [];
-        const add = (p, c, w, t, r) => SIG.push({ pred: p, conf: Math.min(95, c), weight: w, type: t, reason: r });
+        const add = (p, c, w, t, r) => SIG.push({ pred: p, conf: Math.min(95, Math.round(c)), weight: w, type: t, reason: r });
 
-        // ═══════════════════════════
-        // 🔴 CỰC MẠNH (70-95%)
-        // ═══════════════════════════
-        if (lastS <= 4) {
-            const d = this.DB.lowScore;
-            const total = (d.T || 0) + (d.X || 0);
-            const rt = total > 0 ? Math.round((d.T || 0) / total * 100) : 79;
-            add('T', rt, 5.0, 'CỰC MẠNH', `Tổng ${lastS}→Tài ${rt}%`);
+        // 1-3: CỰC MẠNH
+        if (lS <= 4) { const d = this.DB.lowS; const total = (d.T||0)+(d.X||0); const rt = total>0?Math.round((d.T||0)/total*100):79; add('T', rt, 5.0, 'CỰC MẠNH', `Tổng ${lS}→Tài ${rt}%`); }
+        if (lS >= 17) { const d = this.DB.highS; const total = (d.T||0)+(d.X||0); const rx = total>0?Math.round((d.X||0)/total*100):73; add('X', rx, 5.0, 'CỰC MẠNH', `Tổng ${lS}→Xỉu ${rx}%`); }
+        if (lD[0]===lD[1]&&lD[1]===lD[2]) { const d=this.DB.triple; const total=(d.T||0)+(d.X||0); const r=total>0?Math.round(Math.max(d.T||0,d.X||0)/total*100):72; add(lD[0]>=4?'X':'T',r,4.0,'3 MẶT',`3 mặt ${lD[0]}→${lD[0]>=4?'Xỉu':'Tài'} ${r}%`); }
+
+        // 4-5: RẤT MẠNH
+        if (lD.filter(x=>x===1).length>=2) { const d=this.DB.pair1; const total=(d.T||0)+(d.X||0); const r=total>0?Math.round((d.T||0)/total*100):72; add('T',r,3.5,'CẶP 1',`Cặp 1→Tài ${r}%`); }
+        if (lD.filter(x=>x===6).length>=2&&lS>=15) add('X',68,3.0,'CẶP 6','Cặp 6+Điểm cao→Xỉu');
+
+        // 6-10: BỆT
+        if (streak>=15) { const bd=this.DB.bet[lR]?.[Math.min(streak,25)]; const gr=bd&&bd.t>0?Math.round(bd.gay/bd.t*100):92; add(lR==='T'?'X':'T',gr,5.0,'SIÊU BỆT',`Bệt ${streak}→CHẮC GÃY ${gr}%`); }
+        else if (streak>=10) { const bd=this.DB.bet[lR]?.[Math.min(streak,25)]; const gr=bd&&bd.t>0?Math.round(bd.gay/bd.t*100):82; add(lR==='T'?'X':'T',gr,4.5,'SIÊU BỆT',`Bệt ${streak}→GÃY ${gr}%`); }
+        else if (streak>=7) { const bd=this.DB.bet[lR]?.[streak]; const gr=bd&&bd.t>0?Math.round(bd.gay/bd.t*100):72; add(lR==='T'?'X':'T',gr,3.5,'BỆT DÀI',`Bệt ${streak}→Gãy ${gr}%`); }
+        else if (streak>=5) { const bd=this.DB.bet[lR]?.[streak]; const gr=bd&&bd.t>0?Math.round(bd.gay/bd.t*100):62; add(lR==='T'?'X':'T',gr,2.5,'BỆT',`Bệt ${streak}→Gãy ${gr}%`); }
+        else if (streak>=2) { const bd=this.DB.bet[lR]?.[streak]; const tr2=bd&&bd.t>0?Math.round(bd.tiep/bd.t*100):56; add(lR,tr2,1.5,'BỆT NGẮN',`Bệt ${streak}→Tiếp ${tr2}%`); }
+
+        // 11-13: CẦU 1-1 & ZIGZAG
+        if (c11len>=5) add(lR==='T'?'X':'T',66,2.5,'CẦU 1-1 DÀI',`Cầu 1-1 (${c11len} nhịp)→Đảo`);
+        else if (c11len>=3) add(lR==='T'?'X':'T',60,2.0,'CẦU 1-1',`Cầu 1-1 (${c11len} nhịp)→Đảo`);
+        if (flips>=8) add(lR==='T'?'X':'T',70,2.5,'ZIGZAG MẠNH',`Zigzag ${flips}/9→Đảo`);
+        else if (flips>=6) add(lR==='T'?'X':'T',63,2.0,'ZIGZAG','Zigzag→Đảo');
+        else if (flips<=2&&n>=10) add(lR,58,1.5,'ÍT ĐỔI','Ít đổi→Tiếp');
+
+        // 14-17: ĐIỂM & MOMENTUM & STREAK
+        if (lS>=5&&lS<=6) { const d=this.DB.score[lS]; const r=d&&d.t>0?Math.round(d.T/d.t*100):58; add('T',r,2.5,'ĐIỂM THẤP',`Tổng ${lS}→Tài ${r}%`); }
+        if (lS>=15&&lS<=16) { const d=this.DB.score[lS]; const r=d&&d.t>0?Math.round(d.T/d.t*100):54; add('T',r,1.5,'ĐIỂM CAO',`Tổng ${lS}→Tài ${r}%`); }
+        if (Math.abs(trend5)>7) add(trend5>0?'X':'T',64,2.0,'MOMENTUM',`Điểm ${trend5>0?'tăng':'giảm'} mạnh`);
+        if (scoreUp3) { const d=this.DB.scoreStreak.up3; if((d.T||0)+(d.X||0)>=5){const r=Math.round((d.X||0)/((d.T||0)+(d.X||0))*100);add('X',r,2.0,'ĐIỂM TĂNG 3','Điểm tăng 3 phiên→Xỉu');} }
+        if (scoreDn3) { const d=this.DB.scoreStreak.dn3; if((d.T||0)+(d.X||0)>=5){const r=Math.round((d.T||0)/((d.T||0)+(d.X||0))*100);add('T',r,2.0,'ĐIỂM GIẢM 3','Điểm giảm 3 phiên→Tài');} }
+
+        // 18-19: TẦN SUẤT
+        if (t10>=7) add('X',63,2.0,'TẦN SUẤT',`Nhiều Tài(${t10}/10)→Xỉu`);
+        else if (t10<=3) add('T',63,2.0,'TẦN SUẤT',`Nhiều Xỉu(${10-t10}/10)→Tài`);
+
+        // 20: PATTERN
+        for (let pl=7; pl>=3; pl--) {
+            const k=R.slice(-pl).join(''), p=this.DB.pattern.get(k);
+            if(p&&p.t>=5) { const tR=p.T/p.t; if(tR>=0.65){add('T',Math.round(tR*100),2.5,'PATTERN',`"${k}"→Tài ${Math.round(tR*100)}%`);break;} if(tR<=0.35){add('X',Math.round((1-tR)*100),2.5,'PATTERN',`"${k}"→Xỉu ${Math.round((1-tR)*100)}%`);break;} }
         }
 
-        if (lastS >= 17) {
-            const d = this.DB.highScore;
-            const total = (d.T || 0) + (d.X || 0);
-            const rx = total > 0 ? Math.round((d.X || 0) / total * 100) : 73;
-            add('X', rx, 5.0, 'CỰC MẠNH', `Tổng ${lastS}→Xỉu ${rx}%`);
+        // 21: MARKOV
+        for (let o=4; o>=2; o--) {
+            const k=R.slice(-o).join(''), mk=this.DB.markov[o][k];
+            if(mk&&mk.t>=5) { const tR=mk.T/mk.t; if(tR>=0.62){add('T',Math.round(50+tR*30),2.0,`MARKOV-${o}`,'Markov→Tài');break;} if(tR<=0.38){add('X',Math.round(50+(1-tR)*30),2.0,`MARKOV-${o}`,'Markov→Xỉu');break;} }
         }
 
-        // 🟠 RẤT MẠNH (65-80%)
-        if (lastD[0] === lastD[1] && lastD[1] === lastD[2]) {
-            const d = this.DB.triple;
-            const total = (d.T || 0) + (d.X || 0);
-            const r = total > 0 ? Math.round(Math.max(d.T || 0, d.X || 0) / total * 100) : 72;
-            add(lastD[0] >= 4 ? 'X' : 'T', r, 4.0, 'RẤT MẠNH', `3 mặt ${lastD[0]}→${lastD[0] >= 4 ? 'Xỉu' : 'Tài'} ${r}%`);
-        }
+        // 22-26: CẦU ĐẶC BIỆT
+        if (R.length>=4) { const l4=R.slice(-4); if(l4[0]===l4[1]&&l4[2]===l4[3]&&l4[0]!==l4[2]) add(l4[2],66,2.5,'CẦU 2-2','Cầu 2-2→Tiếp'); }
+        if (R.length>=6) { const l6=R.slice(-6).join(''); if(l6==='TXXTTT') add('X',78,2.5,'CẦU 1-2-3','1-2-3→X'); if(l6==='XTTXXX') add('T',78,2.5,'CẦU 1-2-3','1-2-3→T'); }
+        if (R.length>=5) { const l5=R.slice(-5).join(''); if(l5==='TXTXT') add('X',82,3.0,'TAM GIÁC','Tam giác→X'); if(l5==='XTXTX') add('T',82,3.0,'TAM GIÁC','Tam giác→T'); }
+        if (R.length>=8) { const l8=R.slice(-8); if(l8[0]===l8[1]&&l8[2]===l8[3]&&l8[4]===l8[5]&&l8[6]===l8[7]&&l8[0]!==l8[2]&&l8[2]!==l8[4]) add(l8[6],62,1.5,'CẦU 4-4','Cầu 4-4→Tiếp'); }
 
-        if (lastD.filter(x => x === 1).length >= 2) {
-            const d = this.DB.pair1;
-            const total = (d.T || 0) + (d.X || 0);
-            const r = total > 0 ? Math.round((d.T || 0) / total * 100) : 72;
-            add('T', r, 3.5, 'RẤT MẠNH', `Cặp 1→Tài ${r}%`);
-        }
+        // 27: XÚC XẮC DB
+        const dk=lD.join('-'), dd=this.DB.dice[dk];
+        if(dd&&dd.t>=3) { const tR=dd.T/dd.t; if(tR>=0.65) add('T',Math.round(tR*100),2.0,'XÚC XẮC',`Bộ ${dk}→Tài ${Math.round(tR*100)}%`); else if(tR<=0.35) add('X',Math.round((1-tR)*100),2.0,'XÚC XẮC',`Bộ ${dk}→Xỉu ${Math.round((1-tR)*100)}%`); }
 
-        // Bệt
-        if (streak >= 10) {
-            const betData = this.DB.bet[lastR]?.[Math.min(streak, 15)];
-            const gayRate = betData && betData.total > 0 ? Math.round(betData.gay / betData.total * 100) : 85;
-            add(lastR === 'T' ? 'X' : 'T', gayRate, 5.0, 'SIÊU BỆT', `Bệt ${streak}→CHẮC GÃY ${gayRate}%`);
-        } else if (streak >= 8) {
-            const betData = this.DB.bet[lastR]?.[Math.min(streak, 15)];
-            const gayRate = betData && betData.total > 0 ? Math.round(betData.gay / betData.total * 100) : 75;
-            add(lastR === 'T' ? 'X' : 'T', gayRate, 4.5, 'SIÊU BỆT', `Bệt ${streak}→GÃY ${gayRate}%`);
-        } else if (streak >= 6) {
-            const betData = this.DB.bet[lastR]?.[streak];
-            const gayRate = betData && betData.total > 0 ? Math.round(betData.gay / betData.total * 100) : 65;
-            add(lastR === 'T' ? 'X' : 'T', gayRate, 3.5, 'BỆT DÀI', `Bệt ${streak}→Gãy ${gayRate}%`);
-        } else if (streak >= 4) {
-            const betData = this.DB.bet[lastR]?.[streak];
-            const gayRate = betData && betData.total > 0 ? Math.round(betData.gay / betData.total * 100) : 58;
-            add(lastR === 'T' ? 'X' : 'T', gayRate, 2.5, 'BỆT', `Bệt ${streak}→Gãy ${gayRate}%`);
-        } else if (streak >= 2) {
-            const betData = this.DB.bet[lastR]?.[streak];
-            const tiepRate = betData && betData.total > 0 ? Math.round(betData.tiep / betData.total * 100) : 55;
-            add(lastR, tiepRate, 1.5, 'BỆT NGẮN', `Bệt ${streak}→Tiếp ${tiepRate}%`);
-        }
+        // 28: XÚC XẮC NÓNG
+        const hotFaces = Object.entries(this.DB.diceHot).sort((a,b)=>b[1]-a[1]).slice(0,2).map(e=>parseInt(e[0]));
+        const hotInDice = lD.filter(x=>hotFaces.includes(x)).length;
+        if (hotInDice>=2) add('T',58,1.0,'XÚC XẮC NÓNG','Nhiều mặt nóng→Tài');
 
-        // 🟡 MẠNH (60-70%)
-        if (c11len >= 4) add(lastR === 'T' ? 'X' : 'T', 62, 2.0, 'CẦU 1-1', `Cầu 1-1 (${c11len} nhịp)→Đảo`);
-        if (flips >= 8) add(lastR === 'T' ? 'X' : 'T', 68, 2.5, 'ZIGZAG MẠNH', `Zigzag ${flips}/9→Đảo`);
-        else if (flips >= 6) add(lastR === 'T' ? 'X' : 'T', 62, 2.0, 'ZIGZAG', 'Zigzag→Đảo');
-        else if (flips <= 2 && n >= 10) add(lastR, 57, 1.5, 'ÍT ĐỔI', 'Ít đổi→Tiếp');
+        // MẶC ĐỊNH
+        if (SIG.length===0) add(t10>=5?'T':'X',52,1.0,'MẶC ĐỊNH','Theo xu hướng');
 
-        if (t10 >= 7) add('X', 62, 1.5, 'TẦN SUẤT', `Nhiều Tài (${t10}/10)→Xỉu`);
-        else if (t10 <= 3) add('T', 62, 1.5, 'TẦN SUẤT', `Nhiều Xỉu (${10-t10}/10)→Tài`);
-
-        if (Math.abs(trend5) > 6) add(trend5 > 0 ? 'X' : 'T', 62, 2.0, 'MOMENTUM', `Điểm ${trend5>0?'tăng':'giảm'} mạnh→${trend5>0?'Xỉu':'Tài'}`);
-
-        // 🟢 KHÁ (55-65%)
-        if (lastS >= 5 && lastS <= 6) {
-            const d = this.DB.score[lastS];
-            const r = d && d.total > 0 ? Math.round(d.T / d.total * 100) : 58;
-            add('T', r, 2.0, 'ĐIỂM THẤP', `Tổng ${lastS}→Tài ${r}%`);
-        }
-        if (lastS >= 15 && lastS <= 16) {
-            const d = this.DB.score[lastS];
-            const r = d && d.total > 0 ? Math.round(d.T / d.total * 100) : 55;
-            add('T', r, 1.5, 'ĐIỂM CAO', `Tổng ${lastS}→Tài ${r}%`);
-        }
-
-        // Pattern khớp
-        for (let len = 7; len >= 3; len--) {
-            const k = R.slice(-len).join(''), p = this.DB.pattern.get(k);
-            if (p && p.total >= 5) {
-                const tR = p.T / p.total;
-                if (tR >= 0.65) { add('T', Math.round(tR * 100), 2.5, 'PATTERN', `"${k}"→Tài ${Math.round(tR*100)}%`); break; }
-                if (tR <= 0.35) { add('X', Math.round((1-tR) * 100), 2.5, 'PATTERN', `"${k}"→Xỉu ${Math.round((1-tR)*100)}%`); break; }
-            }
-        }
-
-        // Markov
-        for (let o = 4; o >= 2; o--) {
-            const k = R.slice(-o).join(''), mk = this.DB.markov[o][k];
-            if (mk && mk.total >= 5) {
-                const tR = mk.T / mk.total;
-                if (tR >= 0.6) { add('T', Math.round(50 + tR * 30), 2.0, `MARKOV-${o}`, 'Markov→Tài'); break; }
-                if (tR <= 0.4) { add('X', Math.round(50 + (1-tR) * 30), 2.0, `MARKOV-${o}`, 'Markov→Xỉu'); break; }
-            }
-        }
-
-        // Cầu đặc biệt
-        if (R.length >= 4) {
-            const l4 = R.slice(-4);
-            if (l4[0] === l4[1] && l4[2] === l4[3] && l4[0] !== l4[2]) add(l4[2], 65, 2.0, 'CẦU 2-2', 'Cầu 2-2→Tiếp');
-        }
-        if (R.length >= 6) {
-            const l6 = R.slice(-6).join('');
-            if (l6 === 'TXXTTT') add('X', 77, 2.5, 'CẦU 1-2-3', '1-2-3→X');
-            if (l6 === 'XTTXXX') add('T', 77, 2.5, 'CẦU 1-2-3', '1-2-3→T');
-        }
-        if (R.length >= 5) {
-            const l5 = R.slice(-5).join('');
-            if (l5 === 'TXTXT') add('X', 80, 3.0, 'TAM GIÁC', 'Tam giác→X');
-            if (l5 === 'XTXTX') add('T', 80, 3.0, 'TAM GIÁC', 'Tam giác→T');
-        }
-
-        // Xúc xắc DB
-        const dk = lastD.join('-'), dd = this.DB.dice[dk];
-        if (dd && dd.total >= 3) {
-            const tR = dd.T / dd.total;
-            if (tR >= 0.6) add('T', Math.round(tR * 100), 2.0, 'XÚC XẮC DB', `Bộ ${dk}→Tài ${Math.round(tR*100)}%`);
-            else if (tR <= 0.4) add('X', Math.round((1-tR) * 100), 2.0, 'XÚC XẮC DB', `Bộ ${dk}→Xỉu ${Math.round((1-tR)*100)}%`);
-        }
-
-        // Mặc định
-        if (SIG.length === 0) add(t10 >= 5 ? 'T' : 'X', 52, 1.0, 'MẶC ĐỊNH', 'Theo xu hướng');
-
-        // ═══════════════════════════
-        // TỔNG HỢP KẾT QUẢ
-        // ═══════════════════════════
-        SIG.sort((a, b) => (b.weight * b.conf) - (a.weight * a.conf));
-        const top = SIG.slice(0, 20);
-
-        let sT = 0, sX = 0, tW = 0;
-        for (const s of top) {
-            const w = s.weight * (s.conf / 100);
-            if (s.pred === 'T') sT += w; else sX += w;
-            tW += w;
-        }
-
-        if (tW === 0) return { prediction: R[n - 1] === 'T' ? 'Xỉu' : 'Tài', confidence: 52 };
-
-        const probT = sT / tW;
-        const finalPred = probT > 0.5 ? 'T' : 'X';
-        let conf = Math.round(Math.abs(probT - 0.5) * 2 * 100);
-
-        // Giới hạn theo số lượng tín hiệu
-        if (SIG.length < 3) conf = Math.min(conf, 60);
-        else if (SIG.length < 5) conf = Math.min(conf, 72);
-        else if (SIG.length < 8) conf = Math.min(conf, 80);
-
-        // Đồng thuận
-        const t3 = top.slice(0, 3), t5 = top.slice(0, 5);
-        if (t5.every(s => s.pred === t5[0].pred) && SIG.length >= 8) conf = Math.min(95, conf + 8);
-        else if (t3.every(s => s.pred === t3[0].pred) && SIG.length >= 5) conf = Math.min(88, conf + 4);
-
-        conf = Math.max(52, Math.min(95, conf));
-        if (Math.abs(probT - 0.5) < 0.04) conf = Math.min(conf, 58);
-
-        return { prediction: finalPred === 'T' ? 'Tài' : 'Xỉu', confidence: conf, totalSignals: SIG.length };
+        // TỔNG HỢP
+        SIG.sort((a,b)=>(b.weight*b.conf)-(a.weight*a.conf));
+        const top=SIG.slice(0,20);
+        let sT=0,sX=0,tW=0;
+        for(const s of top){const w=s.weight*(s.conf/100);if(s.pred==='T')sT+=w;else sX+=w;tW+=w;}
+        if(tW===0)return{prediction:R[n-1]==='T'?'Xỉu':'Tài',confidence:52};
+        const probT=sT/tW,finalPred=probT>0.5?'T':'X';
+        let conf=Math.round(Math.abs(probT-0.5)*2*100);
+        if(SIG.length<3)conf=Math.min(conf,60);else if(SIG.length<5)conf=Math.min(conf,72);else if(SIG.length<8)conf=Math.min(conf,80);
+        const t3=top.slice(0,3),t5=top.slice(0,5);
+        if(t5.every(s=>s.pred===t5[0].pred)&&SIG.length>=8)conf=Math.min(95,conf+8);
+        else if(t3.every(s=>s.pred===t3[0].pred)&&SIG.length>=5)conf=Math.min(88,conf+4);
+        conf=Math.max(52,Math.min(95,conf));
+        if(Math.abs(probT-0.5)<0.04)conf=Math.min(conf,58);
+        return{prediction:finalPred==='T'?'Tài':'Xỉu',confidence:conf,totalSignals:SIG.length};
     }
 }
 
 // ======================================================
 // KHỞI TẠO AI
 // ======================================================
-const master = new SupremeAIV3();
+const master = new SupremeAIV7();
 
 // ======================================================
 // ANALYZE CAU - 8 PHIÊN
@@ -381,8 +324,7 @@ function analyzeCau(history) {
     const last8 = results.slice(-8);
     const patternStr = last8.join('');
     let parts = [];
-    let streak = 1;
-    const last = last8[last8.length - 1];
+    let streak = 1; const last = last8[last8.length - 1];
     for (let i = last8.length - 2; i >= 0; i--) { if (last8[i] === last) streak++; else break; }
     if (streak >= 3) parts.push(`Bệt ${streak} ${last === 'T' ? 'Tài' : 'Xỉu'}`);
     let is11 = true;
@@ -457,8 +399,8 @@ async function autoScan() {
 }
 
 app.listen(PORT, () => {
-    console.log("🌟 Supreme AI V3 chạy tại port " + PORT);
+    console.log("🌟 Supreme AI V7 chạy tại port " + PORT);
     console.log("🔗 API: " + API_URL);
-    console.log("📊 500+ thuật toán | % 52-95% | Quét 0.1s");
+    console.log("📊 28+ thuật toán | % 52-95% | Quét 0.1s");
     autoScan();
 });
