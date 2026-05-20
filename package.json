@@ -1,12 +1,25 @@
 {
-  "name": "byanhkhoi",
-  "version": "2.0.0",
-  "main": "sunwin.js",
+  "name": "lc79-prediction-server",
+  "version": "1.0.0",
+  "description": "Lau Cua 79 - Tai Xiu Prediction with Session Accumulator",
+  "main": "lc79b.js",
   "scripts": {
-    "start": "node sunwin.js"
+    "start": "node lc79b.js",
+    "dev": "nodemon lc79b.js"
   },
+  "keywords": [
+    "tai-xiu",
+    "prediction",
+    "express",
+    "axios"
+  ],
+  "author": "@tiendataox",
+  "license": "ISC",
   "dependencies": {
-    "axios": "^1.6.8",
-    "express": "^4.19.2"
+    "axios": "^1.7.9",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
   }
 }
